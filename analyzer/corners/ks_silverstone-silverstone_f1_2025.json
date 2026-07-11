@@ -1,0 +1,55 @@
+{
+  "track": "ks_silverstone/silverstone_f1_2025",
+  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "corners": [
+    {
+      "n": "1",
+      "name": "Abbey",
+      "s0": 0.033,
+      "s1": 0.068
+    },
+    {
+      "n": "2",
+      "name": "Farm",
+      "s0": 0.071,
+      "s1": 0.105
+    },
+    {
+      "n": "3-5",
+      "name": "Village / Loop / Aintree",
+      "s0": 0.119,
+      "s1": 0.209
+    },
+    {
+      "n": "6-7",
+      "name": "Brooklands / Luffield",
+      "s0": 0.296,
+      "s1": 0.376
+    },
+    {
+      "n": "9",
+      "name": "Copse",
+      "s0": 0.486,
+      "s1": 0.525
+    },
+    {
+      "n": "10-14",
+      "name": "Maggotts / Becketts",
+      "s0": 0.581,
+      "s1": 0.705
+    },
+    {
+      "n": "15",
+      "name": "Stowe",
+      "s0": 0.816,
+      "s1": 0.864
+    },
+    {
+      "n": "16-18",
+      "name": "Vale / Club",
+      "s0": 0.907,
+      "s1": 0.976
+    }
+  ],
+  "straights": []
+}

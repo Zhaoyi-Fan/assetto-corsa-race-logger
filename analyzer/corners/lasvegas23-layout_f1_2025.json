@@ -1,0 +1,55 @@
+{
+  "track": "lasvegas23/layout_f1_2025",
+  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "corners": [
+    {
+      "n": "1-4",
+      "name": "",
+      "s0": 0.025,
+      "s1": 0.118
+    },
+    {
+      "n": "5",
+      "name": "",
+      "s0": 0.232,
+      "s1": 0.255
+    },
+    {
+      "n": "6-9",
+      "name": "",
+      "s0": 0.265,
+      "s1": 0.36
+    },
+    {
+      "n": "10",
+      "name": "",
+      "s0": 0.418,
+      "s1": 0.443
+    },
+    {
+      "n": "11",
+      "name": "",
+      "s0": 0.466,
+      "s1": 0.487
+    },
+    {
+      "n": "12",
+      "name": "Strip 入口",
+      "s0": 0.495,
+      "s1": 0.521
+    },
+    {
+      "n": "14",
+      "name": "Strip 末端",
+      "s0": 0.814,
+      "s1": 0.856
+    },
+    {
+      "n": "16-17",
+      "name": "",
+      "s0": 0.961,
+      "s1": 0.978
+    }
+  ],
+  "straights": []
+}

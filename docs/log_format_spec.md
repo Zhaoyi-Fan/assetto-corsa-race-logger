@@ -1,0 +1,203 @@
+# VRC Race Logger — log format spec (schema 1) + app notes
+
+**App:** `<AC root>\apps\lua\vrc_race_logger\`
+(read-only CSP Lua app, `[CORE] LAZY = NONE` → loads at AC start, runs with window closed).
+**Output:** `<AC root>\logs\vrclog_<YYYYMMDD_HHMMSS>_<trackFullID>_<session>[ _rN ].txt`
+— one plain-text file per session (chunked to `*.parts\part_NNNNNN.txt` during the session,
+merged on finalize; `_rN` suffix = Nth session restart). `logs\_active_recording.txt` is the
+crash pointer (2 lines: partsDir, finalPath); if present at next AC launch, leftovers are merged
+automatically with `END reason=salvaged`.
+
+**App V1.2 lifecycle changes (format unchanged, schema stays 1):**
+- Finalize waits for in-flight async chunk writes before merging and verifies the on-disk
+  chunk count; if chunks are missing (write never landed / timeout), the `.parts` dir AND the
+  pointer are kept so the next launch salvages them — no more silent tail truncation.
+  Shutdown with writes pending also defers to salvage instead of merging a partial set.
+- Sessions > 256 MB are NOT merged: the final artifact is the `.parts` directory itself
+  (parsers must accept `.parts` dirs — the Python analyzer already does).
+- "Start new log now" UI button force-records the current session even if its type is
+  filtered out (one-shot, expires when the session index changes).
+- All float fields of the F line now pass the NaN/inf guard (`num()`), same as S/CAR lines.
+
+**This document is the parsing contract for the Python analyzer. Update it in lockstep with
+`SCHEMA_VERSION` in the Lua.**
+
+## General rules
+
+- Line-based, comma-separated, first token = line type. JSON payloads (META/CAR/END) are a single
+  `{...}` object occupying the remainder of the line after the fixed prefix — split on the first
+  1 (META/END) or 2 (CAR) commas only.
+- `t` on every stream/event line = **milliseconds since session start** (integer;
+  `sim.time - simTime0`). Absolute anchors in META: `simTime0` (ms since AC start) and
+  `systemTime` (unix seconds). Gaps in `t` are normal: sampling is suspended while paused /
+  watching replay / in main menu.
+- Wheel order everywhere: **0=FL, 1=FR, 2=RL, 3=RR**.
+- Car index = AC car index (0 = player in offline races). Driver/car names in CAR lines.
+- NaN/±inf raw values are written as `0` (guarded in the app).
+
+## Header lines (start of file)
+
+```
+VRCLOG,<schema:int>,<appVersion>
+META,{json}
+CAR,<idx>,{json}          × carsCount
+```
+
+META keys: `schema, date ("YYYY-MM-DD HH:MM:SS" local), track, trackFull ("track/layout"),
+trackName, trackLengthM, sessionIndex, sessionType (ac.SessionType int), sessionName
+(practice|qualify|race|hotlap|timeattack|drift|drag|session), laps, durationMin, timedRace (bool),
+cars, fastHz, slowHz (=1), weatherEvery (=5 s), simTime0, systemTime, restart (int),
+airTemp, roadTemp, grip, rain`.
+
+CAR keys: `driver, car (folder ID), skin, ai (bool), aiLevel (0..1, -1=human),
+aiAggression (launcher ×0.95, -1=human), ballast (kg), restrictor, maxFuel, compound (index)`.
+
+## F — fast stream (default 15 Hz, configurable 5–30; per active car)
+
+```
+F,t,car,posX,posY,posZ,compass,speedKmh,gas,brake,steer,gear,vLocX,vLocZ,yawRate,
+  accX,accY,accZ,nd0,nd1,nd2,nd3,wheelsOut,surfHex,spline
+```
+
+| field | unit / notes |
+|---|---|
+| posX/Y/Z | m, AC world frame, Y up (%.2f) |
+| compass | heading deg; **real range −180…180** (stub claims 0–360 — wrong on this build); for viewer arrows prefer velocity direction when speed > ~5 km/h |
+| speedKmh | km/h |
+| gas, brake | 0–1 (AI physics inputs are real) |
+| steer | steering wheel angle, deg (+ = right) |
+| gear | int, 0 = N, -1 = R |
+| vLocX, vLocZ | local velocity m/s: X sideways, Z forward → **car slip angle β = atan2(vLocX, vLocZ)** |
+| yawRate | localAngularVelocity.y, rad/s |
+| accX/Y/Z | G-forces: X lateral, Y vertical (kerb strikes), Z longitudinal |
+| nd0..nd3 | per-wheel ndSlip, normalized slip (>1 = past grip peak), clamped ≤ 99.99 |
+| wheelsOut | int count of wheels outside allowed track (0–4) |
+| surfHex | hex int, 4 nibbles [FL][FR][RL][RR], values = ac.SurfaceExtendedType: 0 base, 1 extraturf, 2 grass, 3 gravel, 4 kerb, 5 old, 6 sand, 7 ice, 8 snow |
+| spline | track progress 0–1 (car.splinePosition) |
+
+Lateral offset from the AI line is **not** logged — compute offline from posXYZ vs fast_lane.ai
+(existing parsers), which also allows comparing against any line version.
+
+## S — slow stream (1 Hz, per active car)
+
+```
+S,t,car,fuel,tc0,tc1,tc2,tc3,pr0,pr1,pr2,pr3,wear0,wear1,wear2,wear3,
+  dmg0,dmg1,dmg2,dmg3,dmg4,engineLife,gearboxDmg,racePos,lap,flags,
+  kersCharge,flatMax,sd0,sd1,sd2,sd3,compound
+```
+
+fuel L; tcN tyre core °C; prN pressure psi; wearN 0–1; dmgN = AC damage zones (accumulated impact
+km/h, zones front/rear/left/right/5th unused); engineLife 0–1000 (breaks at 0); gearboxDmg 0–1;
+racePos 1-based; lap = completed laps; kersCharge 0–1 (ERS battery); flatMax = max tyreFlatSpot of
+4 wheels; sdN suspensionDamage per wheel; compound = current tyre set index.
+
+`flags` bitmask: 1 inPitlane, 2 inPitBox, 4 retired, 8 raceFinished, 16 aiGoingToPits,
+32 aiRainTyres, 64 drsAvailable, 128 drsActive, 256 currentLapValid.
+
+## W — weather/sim stream (every 5 s)
+
+```
+W,t,airTemp,roadTemp,grip,rainIntensity,rainWetness,windKmh,windDirDeg,flagType
+```
+grip = roadGrip 0–1; flagType = ac.FlagType int (caution/yellow handling as in DRS work).
+
+## EV — events (callback-driven, never missed between samples)
+
+```
+EV,t,COLL,car,collidedWithRaw,nearestCar,depth,speedKmh,nearestSpeedKmh,relSpeedKmh,posX,posZ,spline,lap
+EV,t,LAP,car,lapTimeMs,valid(0|1),cuts,lapCount,split1Ms[,split2Ms,...]   ← valid/cuts UNRELIABLE in race sessions (constant 0/1 artifact, see below); lapTime+splits are good
+EV,t,JUMP,car,resetCounter          ← teleport/reset (DRS-saga ghost cars: treat surrounding F data as suspect)
+EV,t,PIT_IN,car   / EV,t,PIT_OUT,car    (pitlane boundary, fast-tick precision)
+EV,t,BOX_IN,car   / EV,t,BOX_OUT,car    (parked in pit box → stop duration)
+EV,t,RETIRE,car
+EV,t,FINISH,car,racePosition
+EV,t,FLAG,flagType                       (transitions only)
+```
+
+COLL notes — semantics **verified on real data (2026-07-09 spa race, 6,901 events)**:
+- `collidedWithRaw`: **0 = track, otherwise = other car index + 1** (93/98 car-car events matched
+  `raw−1 == nearestCar`; the 5 mismatches were multi-car melees where the nearest car wasn't the
+  contact partner — trust `raw−1` for identity, use `nearestCar` as cross-check).
+- `nearestCar` = nearest other car within 10 m at event time (−1 = none); `relSpeedKmh` = |v_car − v_nearest|.
+- ⭐ **Floor-scrape flood**: F1 floors bottoming at speed fire raw=0 events near-continuously —
+  first race: 6,803 raw=0 events at avg 302 km/h, clustered at spa spline ~0.10–0.15 (Eau Rouge
+  compression), 0.2–0.3, 0.5–0.6 (Pouhon), 0.8–0.9. Useful as a *bottoming map*, not collisions —
+  analyzer must treat raw=0 + high speed + no speed loss as scrape, not crash.
+- Dedup since **app V1.1**: car-car pairs 0.25 s, track contacts (raw=0) 2.0 s per car.
+  (V1.0 files, e.g. the 2026-07-09 ones, have raw=0 deduped at 0.25 s → the flood is IN the data.)
+- Multi-car pileups appear as several COLL lines (one per car, each with its own nearest).
+
+## Trailer
+
+```
+END,t,{"reason":...,"lines":N,"chunks":N}
+```
+reason ∈ results | session_change | session_restart | disabled | manual | shutdown | salvaged.
+**Salvaged files have `END,0,...` and no counters** — analyzer must tolerate a missing/short trailer
+and (belt-and-braces) accept a stray `*.parts\` dir as input by concatenating `part_*.txt` in order.
+
+## Volume & rates
+
+15 Hz × 20 cars ≈ ~135 B/F-line → ~2.5–3 MB/min ≈ 80–90 MB per 30-min race. NTFS-compress or zip
+after analysis if hoarding. S/W/EV are noise in comparison.
+
+## First-run verification results (2026-07-09, spa layout_f1_2025, 16 cars, 12.8 min)
+
+Sampling cadence exact: 184,880 F lines vs 184,800 theoretical (770 s × 15 Hz × 16), S = 770×16
+exactly, W = 770/5 exactly. ~2.1 MB/min. Checklist outcomes:
+
+1. ✅ Records without touching the window (`LAZY = NONE` behaves as documented).
+2. ✅ `os.date` fine (stamped filenames).
+3. ✅ LAP splits correct: 3 splits at spa, sum == lapTimeMs.
+4. ⚠️ COLL flood from floor scrapes → fixed in V1.1 (split dedup, see COLL notes).
+5. ⏳ Results-screen auto-finalize UNTESTED (user ended via manual button, `reason=manual`) —
+   check on the next naturally-finished race.
+6. ✅ No reported FPS issues.
+7. ✅ `collidedWith` = other index + 1 (0 = track) — confirmed.
+8. ✅ Restart flow works (`_r1`, `_r2` files). ⏳ Crash-salvage untested.
+
+### Analyzer-relevant signatures discovered in the first race
+
+- **Stuck-AI retirement** (stock AC removes stranded AI): `JUMP` + `PIT_IN` + `BOX_IN` + `RETIRE`
+  all at the same tick, zero damage, preceded by ~10–15 s of ~0 km/h at a frozen spline.
+  8/15 AI DNF'd this way (first: car 11 at t=41.5 s after a La Source lap-1 melee at spline
+  ~0.052–0.055, t≈21–25 s). Analyzer: retirement subtype `stuck_removed`, cause = the incident
+  that stranded the car, NOT mechanical.
+- **Damage fields all zero** when the champ runs 0% mechanical damage — don't use dmg/engineLife
+  for cause inference on such configs; rely on kinematics + contacts.
+- ⚠️ **`LAP valid/cuts` is a FALSE SIGNAL in race sessions (at least on this setup) — analyzer
+  must ignore it.** All 61 laps reported `valid=0, cuts=1` with ZERO variance: car 3 (Russell)
+  never put a single wheel outside or on an invalid surface all race yet got cuts=1 every lap;
+  the player's lap with a 7 s four-wheels-in-sand excursion ALSO got exactly cuts=1 (didn't
+  accumulate). Constant ⇒ uninformative. (Initial reading "systematic cut at T13 / line off
+  track" was WRONG and is retracted — see correction in the claudelogs research log Round 5.)
+- **wheelsOut≥3 histograms measure TIME spent out, not passes**: the 1,881 AI samples at spline
+  0.665–0.67 were crashed cars sitting in the Les Fagnes sand trap at ~1.5 km/h (surf `6666` =
+  4×Sand), i.e. the stuck→DNF cars — NOT an every-lap line violation. Always check speed/surf
+  before interpreting density peaks.
+- **surfHex is the VISUAL surface hint** (`surfaceExtendedType`), not the validity flag —
+  `surfaceValidTrack` is NOT logged in schema 1. Schema-2 candidate: per-wheel validTrack bitmask
+  (+ maybe live lapCutsCount) if real track-limit analysis is ever needed.
+- resetCounter was 5 for every DNF teleport (grid placement resets count too) — treat it as a
+  change detector, not an absolute.
+- FLAG values observed: 1 (green/start) and 2 (caution cycles around each incident) — 13 events.
+
+## Analyzer + HTML report (BUILT 2026-07-09, v1)
+
+`E:\Codex_Workspace\projects\VRC\tools\race_report\` — see its README.md for usage/modules.
+One command: `py vrclog_report.py <log.txt>` → `<log>.report.html` (single-file, ~7 MB for a
+13-min 16-car race, pipeline ~1 s). Tabs: 总览 (results, lap chart, AI-failure hotspot corners),
+时间轴 (cautions + severity pips + pits), 事故卡片 (chain + confidence-scored evidence + speed/
+brake spark + jump-to-replay), 回放 (canvas map from fast_lane.ai ribbon, follow-cam, live
+leaderboard, per-wheel ndSlip/surface telemetry, scrubber with pips, 1-8× playback).
+
+Verified on the first real race log (browser-tested, zero console errors). Detection calibrated
+against the manually-established facts of that race; key detected story: La Source L1 melee
+(6 cars, KiboOst DNF), Les Fagnes L1 pileup (player + Lawson + Tsunvazo, 2 DNF), Les Combes 8-car
+pileup (Piastri rear-ended Norris), Chicane Norris-into-Tsunoda at 98 km/h rel (both eventually
+DNF), 4 separate AI failures at Les Fagnes → ai_line-suspect note fires for that corner.
+
+Parsing/semantics rules the analyzer enforces (from first-run verification): LAP valid/cuts
+ignored; raw=0 COLL at ≥110 km/h = floor scrape (not crash); damage channels unused (league runs
+0% mech damage) — "recent prior incident within 60 s" is the proxy; wheelsOut histograms are
+time-spent, always joined against speed/surface.

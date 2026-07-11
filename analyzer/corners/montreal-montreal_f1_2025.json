@@ -1,0 +1,49 @@
+{
+  "track": "montreal/montreal_f1_2025",
+  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "corners": [
+    {
+      "n": "1-2",
+      "name": "Senna S",
+      "s0": 0.045,
+      "s1": 0.103
+    },
+    {
+      "n": "3-4",
+      "name": "",
+      "s0": 0.153,
+      "s1": 0.203
+    },
+    {
+      "n": "5",
+      "name": "",
+      "s0": 0.216,
+      "s1": 0.261
+    },
+    {
+      "n": "6-7",
+      "name": "",
+      "s0": 0.271,
+      "s1": 0.335
+    },
+    {
+      "n": "8-9",
+      "name": "",
+      "s0": 0.448,
+      "s1": 0.493
+    },
+    {
+      "n": "10",
+      "name": "L'Epingle",
+      "s0": 0.604,
+      "s1": 0.652
+    },
+    {
+      "n": "13-14",
+      "name": "Wall of Champions",
+      "s0": 0.884,
+      "s1": 0.922
+    }
+  ],
+  "straights": []
+}

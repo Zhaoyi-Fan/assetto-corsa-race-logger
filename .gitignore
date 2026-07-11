@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.report.html
+season.html
+logs/
+.venv/

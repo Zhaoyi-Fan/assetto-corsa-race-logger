@@ -1,0 +1,49 @@
+{
+  "track": "shanghai_v2_25/layout_f1_2025",
+  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "corners": [
+    {
+      "n": "1-4",
+      "name": "Snail",
+      "s0": 0.086,
+      "s1": 0.205
+    },
+    {
+      "n": "6",
+      "name": "",
+      "s0": 0.281,
+      "s1": 0.317
+    },
+    {
+      "n": "7-8",
+      "name": "",
+      "s0": 0.347,
+      "s1": 0.408
+    },
+    {
+      "n": "9-10",
+      "name": "",
+      "s0": 0.41,
+      "s1": 0.505
+    },
+    {
+      "n": "11-13",
+      "name": "Snail 2",
+      "s0": 0.566,
+      "s1": 0.662
+    },
+    {
+      "n": "14",
+      "name": "Hairpin",
+      "s0": 0.871,
+      "s1": 0.904
+    },
+    {
+      "n": "15-16",
+      "name": "",
+      "s0": 0.937,
+      "s1": 0.963
+    }
+  ],
+  "straights": []
+}

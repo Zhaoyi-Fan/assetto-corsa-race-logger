@@ -1,0 +1,61 @@
+{
+  "track": "melbourne/layout_f1_2025",
+  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "corners": [
+    {
+      "n": "1-2",
+      "name": "",
+      "s0": 0.055,
+      "s1": 0.112
+    },
+    {
+      "n": "3-4",
+      "name": "",
+      "s0": 0.197,
+      "s1": 0.255
+    },
+    {
+      "n": "5",
+      "name": "",
+      "s0": 0.264,
+      "s1": 0.3
+    },
+    {
+      "n": "6",
+      "name": "",
+      "s0": 0.344,
+      "s1": 0.386
+    },
+    {
+      "n": "7-8",
+      "name": "",
+      "s0": 0.388,
+      "s1": 0.442
+    },
+    {
+      "n": "9-10",
+      "name": "",
+      "s0": 0.616,
+      "s1": 0.667
+    },
+    {
+      "n": "11",
+      "name": "",
+      "s0": 0.776,
+      "s1": 0.802
+    },
+    {
+      "n": "12",
+      "name": "",
+      "s0": 0.821,
+      "s1": 0.859
+    },
+    {
+      "n": "13-14",
+      "name": "",
+      "s0": 0.866,
+      "s1": 0.933
+    }
+  ],
+  "straights": []
+}
