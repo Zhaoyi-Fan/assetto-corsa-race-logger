@@ -25,6 +25,23 @@ MMO 团本圈多年前就用 Warcraft Logs 解决了这个问题：全程记录�
 为 VRC Formula Alpha 2025 离线联赛而生（阈值也在该联赛真实比赛上标定），适用于任何车与
 赛道内容。
 
+## 在线示例
+
+**[▶ 打开一份真实比赛报告](https://zhaoyi-fan.github.io/assetto-corsa-race-logger/examples/spa-race.report.html)** —
+斯帕 16 车联赛（Formula Alpha 2025）：混乱的第一圈、13 张事故卡、8 个 DNF，还有一个 AI
+反复失控的弯。回放、圈速图、归因——全部在这一个自包含 HTML 里，就是工具的原始产物。
+
+生成它的原始 log 在 [`examples/vrclog_spa_race_example.zip`](examples/vrclog_spa_race_example.zip)
+（解压后 26 MB）。自己复现：
+
+```
+unzip examples/vrclog_spa_race_example.zip -d examples
+python analyzer/vrclog_report.py examples/vrclog_20260709_000356_spa-layout_f1_2025_race_r2.txt
+```
+
+（复现需要本机装有 spa `layout_f1_2025` 赛道 mod——分析器要读它的 AI line；只看示例报告
+则什么都不需要。）
+
 ## 组成
 
 | 组件 | 作用 |
