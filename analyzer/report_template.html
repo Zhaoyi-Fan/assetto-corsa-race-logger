@@ -53,6 +53,22 @@ canvas{display:block}
 .lchip{display:flex; align-items:center; gap:5px; background:var(--bg3); border:1px solid var(--line);
   border-radius:14px; padding:2px 10px; font-size:.78rem; cursor:pointer; user-select:none}
 .lchip.off{opacity:.35}
+/* driving tab */
+select{background:var(--bg3); color:var(--fg); border:1px solid var(--line); border-radius:6px;
+  padding:4px 8px; font-size:.82rem}
+#drvsel{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:8px 0 12px;
+  font-size:.84rem; color:var(--dim)}
+#drvsel .btn.on{border-color:var(--acc); color:var(--fg)}
+#drvlaps{display:flex; flex-wrap:wrap; gap:5px}
+.lapchip{background:var(--bg3); border:1px solid var(--line); border-radius:12px; padding:1px 9px;
+  font-size:.76rem; cursor:pointer; user-select:none; color:var(--dim)}
+.lapchip.on{border-color:var(--acc); color:var(--fg)}
+.lapchip.best{color:var(--ok)}
+.lapchip.pit{text-decoration:line-through}
+.dpos{color:var(--ok)} .dneg{color:var(--bad)}
+#telstrip{width:100%; background:var(--bg); border-radius:6px; margin-top:8px}
+#ribbon{width:100%; height:44px; background:var(--bg2); border:1px solid var(--line);
+  border-radius:8px; margin-top:8px; cursor:pointer; touch-action:none}
 /* replay */
 #replaywrap{display:grid; grid-template-columns:1fr 275px; gap:14px}
 #mapbox{position:relative; background:#0b0e12; border:1px solid var(--line); border-radius:8px; overflow:hidden}
@@ -87,6 +103,7 @@ canvas{display:block}
 <nav>
   <button data-tab="overview" class="on" data-i18n="tabOverview"></button>
   <button data-tab="laps" data-i18n="tabLaps"></button>
+  <button data-tab="driving" data-i18n="tabDriving"></button>
   <button data-tab="timeline" data-i18n="tabTimeline"></button>
   <button data-tab="cards" data-i18n="tabCards"></button>
   <button data-tab="replay" data-i18n="tabReplay"></button>
@@ -119,6 +136,30 @@ canvas{display:block}
     <table id="lapstats"></table>
   </section>
 
+  <section id="tab-driving">
+    <h2><span data-i18n="drvH"></span> <span class="hint" data-i18n="drvHint"></span></h2>
+    <div id="drvsel"></div>
+    <div class="panelbox">
+      <canvas id="drvspd" height="240"></canvas>
+      <canvas id="drvinp" height="110"></canvas>
+      <canvas id="drvdelta" height="110"></canvas>
+    </div>
+    <h2 data-i18n="drvCornersH"></h2>
+    <table id="drvcorners"></table>
+    <div class="grid2" style="margin-top:16px">
+      <div>
+        <h2 data-i18n="drvStyleH"></h2>
+        <table id="drvstyle"></table>
+      </div>
+      <div>
+        <h2><span data-i18n="drvGgH"></span> <span class="hint" data-i18n="drvGgHint"></span></h2>
+        <div class="panelbox"><canvas id="drvgg" height="300"></canvas></div>
+      </div>
+    </div>
+    <h2><span data-i18n="drvHeatH"></span> <span class="hint" data-i18n="drvHeatHint"></span></h2>
+    <div class="panelbox"><canvas id="drvheat"></canvas></div>
+  </section>
+
   <section id="tab-timeline">
     <h2><span data-i18n="tlH"></span> <span class="hint" data-i18n="tlHint"></span></h2>
     <canvas id="tlc"></canvas>
@@ -142,11 +183,13 @@ canvas{display:block}
           <span id="clock" style="font-variant-numeric:tabular-nums; color:var(--dim)"></span>
         </div>
         <canvas id="scrub"></canvas>
+        <canvas id="ribbon"></canvas>
         <div class="hint" data-i18n="replayHint"></div>
       </div>
       <div id="sidebar">
         <div class="panelbox" id="leader"><h2 style="margin-top:0" data-i18n="leaderH"></h2><table></table></div>
-        <div class="panelbox" id="telem"><h2 style="margin-top:0" data-i18n="telemH"></h2><div id="telbody"></div></div>
+        <div class="panelbox" id="telem"><h2 style="margin-top:0" data-i18n="telemH"></h2><div id="telbody"></div>
+          <canvas id="telstrip" height="64"></canvas></div>
       </div>
     </div>
   </section>
@@ -167,7 +210,19 @@ const esc = s => String(s).replace(/[&<>"']/g,
 let LANG = (() => { try { return localStorage.getItem("vrcLang") || "zh"; } catch(e){ return "zh"; } })();
 const I18N = {
   zh: {
-    tabOverview:"总览", tabLaps:"圈速", tabTimeline:"时间轴", tabCards:"事故卡片", tabReplay:"回放",
+    tabOverview:"总览", tabLaps:"圈速", tabDriving:"驾驶分析", tabTimeline:"时间轴", tabCards:"事故卡片", tabReplay:"回放",
+    drvH:"圈对比（距离域）", drvHint:"点击曲线跳到回放对应时刻 · 悬停看数值",
+    drvDriver:"车手", drvLap:"圈", drvRef:"参考:", refSession:"全场最快", refSelf:"自己最快", refCustom:"指定",
+    drvNoLaps:"该车手没有完整圈", drvSame:"选中圈与参考圈相同 — 换一个参考试试",
+    drvCornersH:"弯角分析（选中圈 vs 参考圈）",
+    colCorner:"弯角", colBrakePt:"刹车点(弯前 m)", colEntry:"入弯 km/h", colApex:"Apex km/h",
+    colThrottle:"全油门(过 apex 后 m)", colTime:"弯中耗时", colStab:"刹点稳定性 σ",
+    drvStyleH:"驾驶风格（每圈占比）", styleCoast:"滑行(无油无刹)", styleWot:"全油门",
+    styleTrail:"刹车中带转向", styleSlip:"滑移超限(nd>1.1)", styleApps:"刹车次数/圈",
+    styleSel:"选中圈", styleRef:"参考圈",
+    drvGgH:"G-G 图", drvGgHint:"横向 vs 纵向 G — 云越贴外圈说明复合抓地力用得越满",
+    drvHeatH:"微分段热图", drvHeatHint:"每行一圈,每列 5% 赛段,颜色 = 与该车手该段最佳的差值(点击跳回放)",
+    heatPit:"进站圈",
     resultsH:"比赛结果（记录结束时）", resultsQH:"结果（按最快圈排名）",
     lapChartH:"位置变化（按圈）", lapChartHQ:"过线顺序（排位赛参考）", hotspotsH:"失控热点弯角",
     pitsH:"进站", pitLapCol:"圈", pitDurCol:"静止", pitTyreCol:"轮胎", noPits:"无进站",
@@ -195,7 +250,19 @@ const I18N = {
     wxLabel:"抓地 {g0}–{g1}% · 雨 {r}",
   },
   en: {
-    tabOverview:"Overview", tabLaps:"Lap times", tabTimeline:"Timeline", tabCards:"Incidents", tabReplay:"Replay",
+    tabOverview:"Overview", tabLaps:"Lap times", tabDriving:"Driving", tabTimeline:"Timeline", tabCards:"Incidents", tabReplay:"Replay",
+    drvH:"Lap comparison (distance domain)", drvHint:"click a chart to jump into the replay · hover for values",
+    drvDriver:"Driver", drvLap:"Lap", drvRef:"Reference:", refSession:"Session best", refSelf:"Own best", refCustom:"Custom",
+    drvNoLaps:"no complete laps for this driver", drvSame:"selected lap equals the reference — pick another",
+    drvCornersH:"Corner analysis (selected vs reference)",
+    colCorner:"Corner", colBrakePt:"Brake pt (m before)", colEntry:"Entry km/h", colApex:"Apex km/h",
+    colThrottle:"Full throttle (m after apex)", colTime:"Corner time", colStab:"Brake-pt σ",
+    drvStyleH:"Driving style (share of lap)", styleCoast:"Coasting (no pedal)", styleWot:"Full throttle",
+    styleTrail:"Braking while steering", styleSlip:"Over grip peak (nd>1.1)", styleApps:"Brake applications/lap",
+    styleSel:"Selected", styleRef:"Reference",
+    drvGgH:"G-G diagram", drvGgHint:"lateral vs longitudinal G — a fuller ring means more combined grip used",
+    drvHeatH:"Micro-sector heatmap", drvHeatHint:"one row per lap, 5% track segments, color = delta to this driver's best (click to replay)",
+    heatPit:"pit lap",
     resultsH:"Results (at end of recording)", resultsQH:"Results (ranked by best lap)",
     lapChartH:"Positions by lap", lapChartHQ:"Crossing order (quali, reference)", hotspotsH:"Loss-of-control hotspots",
     pitsH:"Pit stops", pitLapCol:"Lap", pitDurCol:"Stationary", pitTyreCol:"Tyres", noPits:"no pit stops",
@@ -277,6 +344,8 @@ const chan = {
   nd: (ci,k,w) => DV.getUint8(off(ci,k)+18+w) / 20,
   surf: (ci,k) => DV.getUint16(off(ci,k)+22, true),
   beta: (ci,k) => DV.getInt16(off(ci,k)+24, true) / 10,
+  accX: (ci,k) => DV.getInt16(off(ci,k)+28, true) / 100,
+  accZ: (ci,k) => DV.getInt16(off(ci,k)+30, true) / 100,
 };
 const SURF_ZH = {0:"沥青",1:"人工草",2:"草地",3:"砾石",4:"路肩",5:"旧沥青",6:"沙地",7:"冰",8:"雪"};
 const SURF_EN = {0:"asphalt",1:"turf",2:"grass",3:"gravel",4:"kerb",5:"old",6:"sand",7:"ice",8:"snow"};
@@ -336,10 +405,11 @@ function showTab(name){
   document.querySelectorAll("main section").forEach(s =>
     s.classList.toggle("on", s.id === "tab-" + name));
   if (name === "overview") drawLapChart();
-  if (name === "replay") { sizeMap(); sizeScrub(); drawScrub(); }
+  if (name === "replay") { sizeMap(); sizeScrub(); drawScrub(); sizeRibbon(); }
   if (name === "timeline") drawTimeline();
   if (name === "cards") drawSparks();
   if (name === "laps") drawLapsTab();
+  if (name === "driving") renderDriving();
 }
 tabs.forEach(b => b.onclick = () => { showTab(b.dataset.tab); });
 window.addEventListener("hashchange", applyHash);
@@ -616,6 +686,426 @@ function drawSparks(){
   });
 }
 
+// ---------- driving analysis (distance-domain lap comparison) -----------------------------
+const TRACK_LEN = DATA.meta.trackLenM || 1;
+const GRID_M = 5;                      // distance resample step
+const DRV = {car: (DATA.cars.find(c => !c.ai) || DATA.cars[0]).i, lap: null,
+             refMode: "session", refCar: null, refLap: null};
+const drvCache = new Map();
+const CORNERS = DATA.track.labels.filter(l => l.s0 !== undefined);
+
+function cleanLaps(ci){ const a = lapsData[ci].filter(l => !l.pit); return a.length ? a : lapsData[ci]; }
+function bestLapOf(ci){ const a = cleanLaps(ci);
+  return a.length ? a.reduce((p,q) => q.ms < p.ms ? q : p) : null; }
+function sessionBest(){ let best = null;
+  for (let ci = 0; ci < CARS; ci++){ const b = bestLapOf(ci);
+    if (b && (!best || b.ms < best.l.ms)) best = {ci, l: b}; }
+  return best; }
+
+function lapChannels(ci, n){
+  const key = ci + ":" + n;
+  if (drvCache.has(key)) return drvCache.get(key);
+  if (!DV) return null;
+  const a = lapsBy[ci], end = a.find(l => l.n === n);
+  if (!end) return null;
+  const prev = a.find(l => l.n === n - 1);
+  const w0 = prev ? prev.t : 0;
+  const k0 = Math.max(0, Math.ceil(w0/DT)), k1 = Math.min(N-1, Math.floor(end.t/DT));
+  if (k1 - k0 < 10) return null;
+  // absolute track position; lap 1 starts behind the line -> unwrap the grid run negative
+  const x = [];
+  for (let k = k0; k <= k1; k++) x.push(SPL[ci][k] * TRACK_LEN);
+  let wrapAt = -1;
+  for (let i = 1; i < x.length; i++) if (x[i] < x[i-1] - TRACK_LEN/2){ wrapAt = i; break; }
+  if (wrapAt > 0) for (let i = 0; i < wrapAt; i++) x[i] -= TRACK_LEN;
+  for (let i = 1; i < x.length; i++) if (x[i] < x[i-1]) x[i] = x[i-1];
+  const src = {t:[], v:[], gas:[], brk:[], str:[], nd:[], ax:[], az:[]};
+  for (let k = k0; k <= k1; k++){
+    src.t.push(k*DT - w0);
+    src.v.push(SPD[ci][k]);
+    src.gas.push(chan.gas(ci,k)); src.brk.push(chan.brake(ci,k));
+    src.str.push(chan.steer(ci,k));
+    src.nd.push(Math.max(chan.nd(ci,k,0), chan.nd(ci,k,1), chan.nd(ci,k,2), chan.nd(ci,k,3)));
+    src.ax.push(chan.accX(ci,k)); src.az.push(chan.accZ(ci,k));
+  }
+  const M = Math.floor(TRACK_LEN / GRID_M);
+  const out = {ci, n, ms: end.ms, absT0: w0, d: new Float32Array(M)};
+  for (const f in src) out[f] = new Float32Array(M);
+  let j = 0;
+  for (let m = 0; m < M; m++){
+    const d = m * GRID_M;
+    while (j < x.length - 2 && x[j+1] < d) j++;
+    const f = x[j+1] > x[j] ? Math.min(1, Math.max(0, (d - x[j])/(x[j+1] - x[j]))) : 0;
+    for (const kf in src) out[kf][m] = src[kf][j] + (src[kf][j+1] - src[kf][j]) * f;
+    out.d[m] = d;
+  }
+  const tAnchor = out.t[0];
+  for (let m = 0; m < M; m++) out.t[m] -= tAnchor;
+  out.absT0 = w0 + tAnchor;
+  drvCache.set(key, out);
+  return out;
+}
+
+// -- selectors ---------------------------------------------------------------------
+function resolveRef(){
+  if (DRV.refMode === "session"){ const b = sessionBest(); return b ? {ci: b.ci, n: b.l.n} : null; }
+  if (DRV.refMode === "self"){ const b = bestLapOf(DRV.car); return b ? {ci: DRV.car, n: b.n} : null; }
+  return (DRV.refCar !== null && DRV.refLap !== null) ? {ci: DRV.refCar, n: DRV.refLap} : null;
+}
+function buildDrvSel(){
+  const el = document.getElementById("drvsel");
+  const opts = (list, sel) => list.map(([v, txt]) =>
+    `<option value="${v}" ${+v === sel ? "selected" : ""}>${esc(txt)}</option>`).join("");
+  const best = bestLapOf(DRV.car);
+  const chips = lapsData[DRV.car].map(l =>
+    `<span class="lapchip ${l.n === DRV.lap ? "on" : ""} ${best && l.n === best.n ? "best" : ""} ${l.pit ? "pit" : ""}"
+       data-n="${l.n}" title="${l.pit ? T("heatPit") : ""}">L${l.n} ${fmtLap(l.ms)}</span>`).join("");
+  const modes = [["session","refSession"],["self","refSelf"],["custom","refCustom"]].map(([m, key]) =>
+    `<button class="btn ${DRV.refMode === m ? "on" : ""}" data-mode="${m}">${T(key)}</button>`).join("");
+  let custom = "";
+  if (DRV.refMode === "custom"){
+    if (DRV.refCar === null) DRV.refCar = DATA.results[0].car;
+    if (DRV.refLap === null) DRV.refLap = bestLapOf(DRV.refCar)?.n ?? null;
+    custom = `<select id="drvrefcar">${opts(DATA.results.map(r => [r.car, nameOf(r.car)]), DRV.refCar)}</select>
+      <select id="drvreflap">${opts(lapsData[DRV.refCar].map(l => [l.n, "L" + l.n + "  " + fmtLap(l.ms)]), DRV.refLap)}</select>`;
+  }
+  el.innerHTML = `<label>${T("drvDriver")}</label>
+    <select id="drvcar">${opts(DATA.results.map(r => [r.car, nameOf(r.car)]), DRV.car)}</select>
+    <span id="drvlaps">${chips}</span>
+    <label>${T("drvRef")}</label>${modes}${custom}`;
+  document.getElementById("drvcar").onchange = e => {
+    DRV.car = +e.target.value; DRV.lap = bestLapOf(DRV.car)?.n ?? null; renderDriving(); };
+  el.querySelectorAll(".lapchip").forEach(ch => ch.onclick = () => {
+    DRV.lap = +ch.dataset.n; renderDriving(); });
+  el.querySelectorAll("[data-mode]").forEach(b => b.onclick = () => {
+    DRV.refMode = b.dataset.mode; renderDriving(); });
+  const rc = document.getElementById("drvrefcar");
+  if (rc) rc.onchange = e => { DRV.refCar = +e.target.value;
+    DRV.refLap = bestLapOf(DRV.refCar)?.n ?? null; renderDriving(); };
+  const rl = document.getElementById("drvreflap");
+  if (rl) rl.onchange = e => { DRV.refLap = +e.target.value; renderDriving(); };
+}
+
+// -- charts ------------------------------------------------------------------------
+const DRVC = {L: 46, R: 14};
+let drvCrossD = -1;
+function drvSize(id, h){
+  const cv = document.getElementById(id);
+  const w = cv.parentElement.clientWidth - 26;
+  if (w <= 40) return null;
+  cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio;
+  cv.style.width = w + "px"; cv.style.height = h + "px";
+  const c = cv.getContext("2d"); c.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  c.clearRect(0, 0, w, h);
+  return [c, w, h];
+}
+function drvBands(c, w, h, labels){
+  const px = d => DRVC.L + (w - DRVC.L - DRVC.R) * d / TRACK_LEN;
+  CORNERS.forEach(l => {
+    const x0 = px(l.s0 * TRACK_LEN), x1 = px(l.s1 * TRACK_LEN);
+    c.fillStyle = "#ffffff08"; c.fillRect(x0, 0, Math.max(2, x1 - x0), h);
+    if (labels){ c.fillStyle = "#8b93a2"; c.font = "9px sans-serif";
+      c.fillText("T" + l.n, x0 + 2, 10); }
+  });
+  if (drvCrossD >= 0){
+    c.strokeStyle = "#e8ebf066"; c.beginPath();
+    c.moveTo(px(drvCrossD), 0); c.lineTo(px(drvCrossD), h); c.stroke();
+  }
+  return px;
+}
+function drvLine(c, px, py, ch, field, color, lw){
+  c.strokeStyle = color; c.lineWidth = lw; c.beginPath();
+  for (let m = 0; m < ch.d.length; m++){
+    const X = px(ch.d[m]), Y = py(ch[field][m]);
+    m ? c.lineTo(X, Y) : c.moveTo(X, Y);
+  }
+  c.stroke();
+}
+function drawDrvCharts(A, B){
+  const s = drvSize("drvspd", 240);
+  if (!s) return;
+  {
+    const [c, w, h] = s;
+    const px = drvBands(c, w, h, true);
+    let vmax = 100;
+    for (const ch of [A, B]) if (ch) for (const v of ch.v) if (v > vmax) vmax = v;
+    const py = v => 14 + (h - 34) * (1 - v / (vmax * 1.04));
+    c.strokeStyle = "#232a38"; c.fillStyle = "#9aa3b2"; c.font = "9px sans-serif";
+    for (let g = 0; g <= 4; g++){ const v = vmax * g / 4, y = py(v);
+      c.beginPath(); c.moveTo(DRVC.L, y); c.lineTo(w - DRVC.R, y); c.stroke();
+      c.fillText(v.toFixed(0), 8, y + 3); }
+    if (B) drvLine(c, px, py, B, "v", "#8b93a2", 1.2);
+    if (A) drvLine(c, px, py, A, "v", carOf(A.ci).color, 1.8);
+    c.fillStyle = "#9aa3b2";
+    c.fillText("km/h", 8, 10);
+  }
+  const si = drvSize("drvinp", 110);
+  if (si){
+    const [c, w, h] = si;
+    const px = drvBands(c, w, h, false);
+    const py = v => 6 + (h - 12) * (1 - v);
+    if (B){ drvLine(c, px, py, B, "gas", "#39c07a55", 1); drvLine(c, px, py, B, "brk", "#e8433f55", 1); }
+    if (A){ drvLine(c, px, py, A, "gas", "#39c07a", 1.6); drvLine(c, px, py, A, "brk", "#e8433f", 1.6); }
+  }
+  const sd = drvSize("drvdelta", 110);
+  if (sd){
+    const [c, w, h] = sd;
+    const px = drvBands(c, w, h, false);
+    if (A && B && !(A.ci === B.ci && A.n === B.n)){
+      const M = Math.min(A.d.length, B.d.length);
+      const dl = new Float32Array(M);
+      for (let m = 0; m < M; m++) dl[m] = A.t[m] - B.t[m];
+      for (let m = 1; m < M - 1; m++) dl[m] = (dl[m-1] + dl[m] + dl[m+1]) / 3;   // light smooth
+      let dmax = 0.2; for (const v of dl) if (Math.abs(v) > dmax) dmax = Math.abs(v);
+      const py = v => h/2 - (h/2 - 8) * v / (dmax * 1.05);
+      c.strokeStyle = "#39424f"; c.beginPath(); c.moveTo(DRVC.L, h/2); c.lineTo(w - DRVC.R, h/2); c.stroke();
+      c.fillStyle = "#9aa3b2"; c.font = "9px sans-serif";
+      c.fillText("+" + dmax.toFixed(2) + "s", 6, 12); c.fillText("-" + dmax.toFixed(2) + "s", 6, h - 5);
+      c.beginPath();
+      for (let m = 0; m < M; m++){ const X = px(A.d[m]), Y = py(dl[m]); m ? c.lineTo(X, Y) : c.moveTo(X, Y); }
+      c.lineTo(px(A.d[M-1]), h/2); c.lineTo(px(A.d[0]), h/2); c.closePath();
+      c.fillStyle = "#e8433f2a"; c.fill();
+      c.beginPath();
+      for (let m = 0; m < M; m++){ const X = px(A.d[m]), Y = py(dl[m]); m ? c.lineTo(X, Y) : c.moveTo(X, Y); }
+      c.strokeStyle = "#f2a93b"; c.lineWidth = 1.5; c.stroke();
+      drawDrvCharts._delta = {d: A.d, dl};
+    } else {
+      c.fillStyle = "#6b7482"; c.font = "11px sans-serif";
+      c.fillText(A && B ? T("drvSame") : "", DRVC.L + 10, h/2);
+      drawDrvCharts._delta = null;
+    }
+  }
+}
+
+// crosshair + click-to-replay on all three chart canvases
+["drvspd", "drvinp", "drvdelta"].forEach(id => {
+  const cv = document.getElementById(id);
+  cv.addEventListener("mousemove", e => {
+    const r = cv.getBoundingClientRect();
+    const w = r.width;
+    const d = (e.clientX - r.left - DRVC.L) / (w - DRVC.L - DRVC.R) * TRACK_LEN;
+    drvCrossD = d >= 0 && d <= TRACK_LEN ? d : -1;
+    const A = renderDriving._A, B = renderDriving._B;
+    drawDrvCharts(A, B);
+    if (drvCrossD < 0 || !A){ showTip(0, 0, null); return; }
+    const m = Math.min(A.d.length - 1, Math.round(drvCrossD / GRID_M));
+    const corner = CORNERS.find(l => drvCrossD >= l.s0 * TRACK_LEN && drvCrossD <= l.s1 * TRACK_LEN);
+    const delta = drawDrvCharts._delta;
+    showTip(e.clientX, e.clientY,
+      `<b>${(drvCrossD/1000).toFixed(2)} km${corner ? " · T" + corner.n + " " + esc(corner.name || "") : ""}</b><br>` +
+      `${esc(nameOf(A.ci))} L${A.n}: ${A.v[m].toFixed(0)} km/h · ${(A.gas[m]*100).toFixed(0)}% / ${(A.brk[m]*100).toFixed(0)}%` +
+      (B && !(A.ci===B.ci && A.n===B.n) ? `<br>${esc(nameOf(B.ci))} L${B.n}: ${B.v[m].toFixed(0)} km/h` : "") +
+      (delta ? `<br>Δt ${delta.dl[m] >= 0 ? "+" : ""}${delta.dl[m].toFixed(2)}s` : ""));
+  });
+  cv.addEventListener("mouseleave", () => { drvCrossD = -1;
+    drawDrvCharts(renderDriving._A, renderDriving._B); showTip(0, 0, null); });
+  cv.addEventListener("click", e => {
+    const A = renderDriving._A;
+    if (!A || drvCrossD < 0) return;
+    const m = Math.min(A.d.length - 1, Math.round(drvCrossD / GRID_M));
+    goReplay(A.absT0 + A.t[m] - 2, A.ci);
+  });
+});
+
+// -- corner table -------------------------------------------------------------------
+function cornerMetrics(ch, l, prevExitD){
+  const d0 = l.s0 * TRACK_LEN, d1 = l.s1 * TRACK_LEN;
+  const i0 = Math.max(0, Math.floor(d0 / GRID_M));
+  const i1 = Math.min(ch.d.length - 1, Math.ceil(d1 / GRID_M));
+  if (i1 <= i0) return null;
+  let apexI = i0;
+  for (let i = i0; i <= i1; i++) if (ch.v[i] < ch.v[apexI]) apexI = i;
+  let bp = null;
+  // scan back max 400 m but never into the previous corner's braking zone
+  const scanFrom = Math.max(0, d0 - 400, prevExitD ?? 0);
+  for (let i = Math.floor(scanFrom / GRID_M); i <= apexI; i++)
+    if (ch.brk[i] > 0.15){ bp = ch.d[i]; break; }
+  let thr = null;
+  for (let i = apexI; i <= Math.min(ch.d.length - 1, i1 + Math.floor(300 / GRID_M)); i++)
+    if (ch.gas[i] > 0.9){ thr = ch.d[i]; break; }
+  return {brakePt: bp === null ? null : d0 - bp, entry: ch.v[i0], apex: ch.v[apexI],
+          thrAfter: thr === null ? null : thr - ch.d[apexI], time: ch.t[i1] - ch.t[i0]};
+}
+function prevExit(i){ return i > 0 ? CORNERS[i-1].s1 * TRACK_LEN : 0; }
+function brakeStability(ci){
+  const per = CORNERS.map(() => []);
+  cleanLaps(ci).forEach(l => {
+    const ch = lapChannels(ci, l.n);
+    if (!ch) return;
+    CORNERS.forEach((c, i) => {
+      const m = cornerMetrics(ch, c, prevExit(i));
+      if (m && m.brakePt !== null) per[i].push(m.brakePt);
+    });
+  });
+  return per.map(a => {
+    if (a.length < 2) return null;
+    const avg = a.reduce((p,q) => p+q, 0) / a.length;
+    return Math.sqrt(a.reduce((p,q) => p + (q-avg)*(q-avg), 0) / (a.length - 1));
+  });
+}
+function fmtD(v, ref, unit, invert){
+  if (v === null) return "—";
+  let s = v.toFixed(unit === "s" ? 2 : 0) + (unit || "");
+  if (ref !== null && ref !== undefined){
+    const d = v - ref;
+    if (Math.abs(d) >= (unit === "s" ? 0.02 : 1)){
+      const good = invert ? d < 0 : d > 0;
+      s += ` <span class="${good ? "dpos" : "dneg"}">(${d >= 0 ? "+" : ""}${d.toFixed(unit === "s" ? 2 : 0)})</span>`;
+    }
+  }
+  return s;
+}
+function buildCornerTable(A, B){
+  const tb = document.getElementById("drvcorners");
+  if (!A){ tb.innerHTML = ""; return; }
+  const sameLap = B && A.ci === B.ci && A.n === B.n;
+  const stab = brakeStability(A.ci);
+  tb.innerHTML = `<tr><th>${T("colCorner")}</th><th>${T("colBrakePt")}</th><th>${T("colEntry")}</th>
+    <th>${T("colApex")}</th><th>${T("colThrottle")}</th><th>${T("colTime")}</th><th>${T("colStab")}</th></tr>` +
+    CORNERS.map((l, i) => {
+      const a = cornerMetrics(A, l, prevExit(i));
+      const b = B && !sameLap ? cornerMetrics(B, l, prevExit(i)) : null;
+      if (!a) return "";
+      return `<tr><td>T${l.n} ${esc(l.name || "")}</td>
+        <td>${fmtD(a.brakePt, b?.brakePt, " m")}</td>
+        <td>${fmtD(a.entry, b?.entry, "")}</td>
+        <td>${fmtD(a.apex, b?.apex, "")}</td>
+        <td>${fmtD(a.thrAfter, b?.thrAfter, " m", true)}</td>
+        <td>${fmtD(a.time, b?.time, "s", true)}</td>
+        <td>${stab[i] === null ? "—" : "±" + stab[i].toFixed(0) + " m"}</td></tr>`;
+    }).join("");
+}
+
+// -- style metrics / G-G / heatmap ----------------------------------------------------
+function styleMetrics(ch){
+  if (!ch) return null;
+  const M = ch.d.length;
+  let coast = 0, wot = 0, trail = 0, slip = 0, apps = 0, moving = 0;
+  for (let m = 0; m < M; m++){
+    if (ch.v[m] > 50) moving++;
+    if (ch.gas[m] < 0.05 && ch.brk[m] < 0.05 && ch.v[m] > 50) coast++;
+    if (ch.gas[m] > 0.95) wot++;
+    if (ch.brk[m] > 0.1 && Math.abs(ch.str[m]) > 25) trail++;
+    if (ch.nd[m] > 1.1) slip++;
+    if (m && ch.brk[m] > 0.15 && ch.brk[m-1] <= 0.15) apps++;
+  }
+  const pc = x => (100 * x / Math.max(1, moving)).toFixed(1) + "%";
+  return {coast: pc(coast), wot: (100*wot/M).toFixed(1) + "%",
+          trail: (100*trail/M).toFixed(1) + "%", slip: (100*slip/M).toFixed(1) + "%",
+          apps: String(apps)};
+}
+function buildStyleTable(A, B){
+  const tb = document.getElementById("drvstyle");
+  const a = styleMetrics(A), b = B && !(A && B.ci === A.ci && B.n === A.n) ? styleMetrics(B) : null;
+  if (!a){ tb.innerHTML = ""; return; }
+  const rows = [["styleCoast","coast"],["styleWot","wot"],["styleTrail","trail"],
+                ["styleSlip","slip"],["styleApps","apps"]];
+  tb.innerHTML = `<tr><th></th><th>${T("styleSel")} L${A.n}</th><th>${b ? T("styleRef") + " L" + B.n : ""}</th></tr>` +
+    rows.map(([key, f]) => `<tr><td>${T(key)}</td><td>${a[f]}</td><td>${b ? b[f] : ""}</td></tr>`).join("");
+}
+function drawGG(A, B){
+  const s = drvSize("drvgg", 300);
+  if (!s) return;
+  const [c, w, h] = s;
+  const cx = w/2, cy = h/2, R = Math.min(w, h)/2 - 16, GMAX = 5.5;
+  c.strokeStyle = "#232a38"; c.fillStyle = "#6b7482"; c.font = "9px sans-serif";
+  for (let g = 1; g <= 5; g++){
+    c.beginPath(); c.arc(cx, cy, R*g/GMAX, 0, 7); c.stroke();
+    c.fillText(g + "G", cx + R*g/GMAX - 12, cy - 3);
+  }
+  c.beginPath(); c.moveTo(cx - R, cy); c.lineTo(cx + R, cy); c.moveTo(cx, cy - R); c.lineTo(cx, cy + R); c.stroke();
+  const plot = (ch, col, r) => {
+    c.fillStyle = col;
+    for (let m = 0; m < ch.d.length; m++){
+      const X = cx + (ch.ax[m] / GMAX) * R, Y = cy - (ch.az[m] / GMAX) * R;
+      c.fillRect(X - r/2, Y - r/2, r, r);
+    }
+  };
+  if (B && !(A && B.ci === A.ci && B.n === A.n)) plot(B, "#8b93a244", 2);
+  if (A) plot(A, carOf(A.ci).color + "66", 2.4);
+}
+const HEAT_SEG = 20;
+function drawHeatmap(){
+  const cv = document.getElementById("drvheat");
+  const laps = lapsData[DRV.car];
+  const rowH = 20, labW = 88;
+  const w = cv.parentElement.clientWidth - 26;
+  if (w <= 40 || !laps.length){ cv.height = 0; return; }
+  const h = laps.length * rowH + 26;
+  cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio;
+  cv.style.width = w + "px"; cv.style.height = h + "px";
+  const c = cv.getContext("2d"); c.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  c.clearRect(0, 0, w, h);
+  const segT = laps.map(l => {
+    const ch = lapChannels(DRV.car, l.n);
+    if (!ch) return null;
+    const out = [];
+    for (let s = 0; s < HEAT_SEG; s++){
+      const i0 = Math.min(ch.d.length - 1, Math.round(s / HEAT_SEG * ch.d.length));
+      const i1 = Math.min(ch.d.length - 1, Math.round((s+1) / HEAT_SEG * ch.d.length));
+      out.push({t: ch.t[i1] - ch.t[i0], abs: ch.absT0 + ch.t[i0]});
+    }
+    return out;
+  });
+  const best = [];
+  for (let s = 0; s < HEAT_SEG; s++){
+    let b = Infinity;
+    laps.forEach((l, i) => { if (!l.pit && segT[i] && segT[i][s].t < b) b = segT[i][s].t; });
+    best.push(b);
+  }
+  const cellW = (w - labW - 8) / HEAT_SEG;
+  drawHeatmap._cells = [];
+  laps.forEach((l, i) => {
+    const y = 22 + i * rowH;
+    c.fillStyle = l.pit ? "#6b7482" : "#9aa3b2"; c.font = "10px sans-serif";
+    c.fillText(`L${l.n} ${fmtLap(l.ms)}${l.pit ? " ⛽" : ""}`, 2, y + 13);
+    if (!segT[i]) return;
+    for (let s = 0; s < HEAT_SEG; s++){
+      const dt = segT[i][s].t - best[s];
+      const f = Math.min(1, Math.max(0, dt / 0.5));
+      c.fillStyle = l.pit ? "#2a3140" :
+        `rgb(${Math.round(57 + f*(232-57))},${Math.round(192 - f*(192-67))},${Math.round(122 - f*(122-63))})`;
+      const x = labW + s * cellW;
+      c.fillRect(x, y + 2, cellW - 1.5, rowH - 5);
+      drawHeatmap._cells.push({x, y: y + 2, w: cellW, h: rowH - 5, abs: segT[i][s].abs});
+    }
+  });
+  c.fillStyle = "#6b7482"; c.font = "9px sans-serif";
+  for (let s = 0; s < HEAT_SEG; s += 2)
+    c.fillText(Math.round(s / HEAT_SEG * 100) + "%", labW + s * cellW, 12);
+}
+document.getElementById("drvheat").addEventListener("click", e => {
+  const r = e.currentTarget.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const hit = (drawHeatmap._cells || []).find(c => mx >= c.x && mx <= c.x + c.w && my >= c.y && my <= c.y + c.h);
+  if (hit) goReplay(hit.abs - 1, DRV.car);
+});
+
+function renderDriving(){
+  if (!DV) return;
+  if (DRV.lap === null || !lapsBy[DRV.car].some(l => l.n === DRV.lap))
+    DRV.lap = bestLapOf(DRV.car)?.n ?? null;
+  buildDrvSel();
+  const A = DRV.lap !== null ? lapChannels(DRV.car, DRV.lap) : null;
+  const ref = resolveRef();
+  const B = ref ? lapChannels(ref.ci, ref.n) : null;
+  renderDriving._A = A; renderDriving._B = B;
+  if (!A){
+    const s = drvSize("drvspd", 240);
+    if (s){ s[0].fillStyle = "#6b7482"; s[0].font = "12px sans-serif";
+            s[0].fillText(T("drvNoLaps"), 60, 120); }
+    drvSize("drvinp", 110); drvSize("drvdelta", 110);
+    buildCornerTable(null, null); buildStyleTable(null, null);
+    drvSize("drvgg", 300); drawHeatmap();
+    return;
+  }
+  drawDrvCharts(A, B);
+  buildCornerTable(A, B);
+  buildStyleTable(A, B);
+  drawGG(A, B);
+  drawHeatmap();
+}
+
 // ---------- map / replay ------------------------------------------------------------------
 const map = document.getElementById("map"), mctx = map.getContext("2d");
 let view = {s: 1, ox: 0, oy: 0};       // world->screen: sx = (x-ox)*s
@@ -820,7 +1310,7 @@ function loop(ts){
   const dt = Math.min(0.1, (ts - lastTs)/1000 || 0); lastTs = ts;
   if (playing){ simT += dt * speedMult; if (simT >= durS){ simT = durS; play(false); } }
   if (document.getElementById("tab-replay").classList.contains("on")){
-    drawMap(); drawScrub(); updatePanels();
+    drawMap(); drawScrub(); drawRibbon(); updatePanels(); drawTelStrip();
   }
   requestAnimationFrame(loop);
 }
@@ -862,6 +1352,98 @@ function drawScrub(){
 function scrubSeek(e){
   const r = scrub.getBoundingClientRect();
   seek((e.clientX - r.left - 6) / (scrubW - 12) * durS);
+}
+
+// full-race throttle/brake ribbon for the selected car (navigation + rhythm view)
+const ribbon = document.getElementById("ribbon");
+let ribbonW = 0, ribbonCar = -1, ribbonCv = null;
+function sizeRibbon(){
+  const w = ribbon.parentElement.clientWidth;
+  if (w <= 50) return;
+  ribbonW = w;
+  ribbon.width = w * devicePixelRatio; ribbon.height = 44 * devicePixelRatio;
+  ribbonCar = -1;   // force rebuild at the new size
+}
+function buildRibbon(){
+  ribbonCar = selected;
+  if (!ribbonCv) ribbonCv = document.createElement("canvas");
+  ribbonCv.width = ribbon.width; ribbonCv.height = ribbon.height;
+  const c = ribbonCv.getContext("2d");
+  c.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  const mid = 22;
+  for (let px = 0; px < ribbonW; px++){
+    const kA = Math.floor(px / ribbonW * (N-1));
+    const kB = Math.min(N-1, Math.floor((px+1) / ribbonW * (N-1)));
+    let g = 0, b = 0;
+    for (let k = kA; k <= kB; k++){
+      const gg = chan.gas(ribbonCar, k), bb = chan.brake(ribbonCar, k);
+      if (gg > g) g = gg;
+      if (bb > b) b = bb;
+    }
+    c.fillStyle = "#39c07a"; c.fillRect(px, mid - g*19, 1, g*19);
+    c.fillStyle = "#e8433f"; c.fillRect(px, mid, 1, b*19);
+  }
+  c.fillStyle = "#9aa3b2"; c.font = "9px sans-serif";
+  c.fillText(shortName(ribbonCar), 4, 10);
+}
+function drawRibbon(){
+  if (!DV || ribbonW <= 0) return;
+  if (selected !== ribbonCar) buildRibbon();
+  const c = ribbon.getContext("2d");
+  c.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  c.clearRect(0, 0, ribbonW, 44);
+  c.drawImage(ribbonCv, 0, 0, ribbonW, 44);
+  const x = simT / durS * ribbonW;
+  c.strokeStyle = "#e8ebf0"; c.lineWidth = 1.2;
+  c.beginPath(); c.moveTo(x, 0); c.lineTo(x, 44); c.stroke();
+}
+let ribbonScrubbing = false;
+ribbon.addEventListener("pointerdown", e => {
+  ribbon.setPointerCapture(e.pointerId); ribbonScrubbing = true;
+  const r = ribbon.getBoundingClientRect();
+  seek((e.clientX - r.left) / r.width * durS);
+});
+ribbon.addEventListener("pointermove", e => {
+  if (!ribbonScrubbing) return;
+  const r = ribbon.getBoundingClientRect();
+  seek((e.clientX - r.left) / r.width * durS);
+});
+ribbon.addEventListener("pointerup", () => { ribbonScrubbing = false; });
+ribbon.addEventListener("pointercancel", () => { ribbonScrubbing = false; });
+
+// live input strip (last 12 s of the selected car) under the telemetry panel
+function drawTelStrip(){
+  const strip = document.getElementById("telstrip");
+  const w = strip.parentElement.clientWidth - 26;
+  if (w <= 40 || !DV) return;
+  if (strip.width !== Math.round(w * devicePixelRatio)){
+    strip.width = w * devicePixelRatio; strip.height = 64 * devicePixelRatio;
+    strip.style.width = w + "px"; strip.style.height = "64px";
+  }
+  const c = strip.getContext("2d");
+  c.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  c.clearRect(0, 0, w, 64);
+  const SPAN = 12, ci = selected;
+  const path = (get, color, lw) => {
+    c.strokeStyle = color; c.lineWidth = lw; c.beginPath();
+    let started = false;
+    for (let px = 0; px <= w; px += 2){
+      const t = simT - SPAN + px / w * SPAN;
+      if (t < 0){ started = false; continue; }
+      const k = Math.min(N-1, Math.max(0, Math.round(t / DT)));
+      const y = get(k);
+      started ? c.lineTo(px, y) : c.moveTo(px, y);
+      started = true;
+    }
+    c.stroke();
+  };
+  path(k => 32 - chan.steer(ci, k) / 180 * 26, "#8b93a2", 1);          // steer, centered
+  path(k => 60 - chan.gas(ci, k) * 56, "#39c07a", 1.5);                 // throttle
+  path(k => 60 - chan.brake(ci, k) * 56, "#e8433f", 1.5);               // brake
+  c.strokeStyle = "#e8ebf055";
+  c.beginPath(); c.moveTo(w - 1, 0); c.lineTo(w - 1, 64); c.stroke();
+  c.fillStyle = "#6b7482"; c.font = "8px sans-serif";
+  c.fillText("-" + SPAN + "s", 3, 8);
 }
 let scrubbing = false;
 scrub.addEventListener("pointerdown", e => {
@@ -1064,15 +1646,17 @@ function setLang(l){
   if (document.getElementById("tab-cards").classList.contains("on")) drawSparks();
   if (document.getElementById("tab-timeline").classList.contains("on")) drawTimeline();
   if (document.getElementById("tab-laps").classList.contains("on")) drawLapsTab();
+  if (document.getElementById("tab-driving").classList.contains("on")) renderDriving();
 }
 document.getElementById("langbtn").onclick = () => setLang(LANG === "zh" ? "en" : "zh");
 
 window.addEventListener("resize", () => {
   if (document.getElementById("tab-overview").classList.contains("on")) drawLapChart();
   if (document.getElementById("tab-cards").classList.contains("on")) drawSparks();
-  if (document.getElementById("tab-replay").classList.contains("on")){ sizeMap(); sizeScrub(); }
+  if (document.getElementById("tab-replay").classList.contains("on")){ sizeMap(); sizeScrub(); sizeRibbon(); }
   if (document.getElementById("tab-timeline").classList.contains("on")) drawTimeline();
   if (document.getElementById("tab-laps").classList.contains("on")) drawLapsTab();
+  if (document.getElementById("tab-driving").classList.contains("on")) renderDriving();
 });
 
 setLang(LANG);   // static UI renders immediately; replay unlocks when decoded
@@ -1080,6 +1664,7 @@ drawLapChart();
 decodeReplay().then(() => {
   sizeMap(); sizeScrub();
   if (location.hash) applyHash();
+  if (document.getElementById("tab-driving").classList.contains("on")) renderDriving();
   requestAnimationFrame(loop);
 }).catch(err => {
   document.querySelector("main").insertAdjacentHTML("afterbegin",

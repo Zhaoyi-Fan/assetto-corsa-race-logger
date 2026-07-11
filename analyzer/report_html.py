@@ -1,7 +1,7 @@
 """report_html — pack analysis into the single-file HTML report.
 
 Replay binary layout (little-endian, per car contiguous, uniform time grid):
-  stride 28 bytes/sample:
+  stride 32 bytes/sample:
     0  f32 x            4  f32 z
     8  i16 heading      (rad * 1000, map-space heading from position deltas)
     10 u16 speed        (km/h * 10)
@@ -13,6 +13,8 @@ Replay binary layout (little-endian, per car contiguous, uniform time grid):
     22 u16 surf         (4 nibbles FL FR RL RR, ac.SurfaceExtendedType)
     24 i16 beta         (deg * 10)
     26 u16 spline       (s * 65535)
+    28 i16 acc_x        (lateral G * 100)
+    30 i16 acc_z        (longitudinal G * 100)
 JS decodes with a DataView; grid dt is exactly duration/(n-1).
 """
 from __future__ import annotations
@@ -27,9 +29,9 @@ import numpy as np
 
 import thresholds as th
 
-STRIDE = 28
+STRIDE = 32
 REPLAY_HZ = 15.0
-REPORT_VERSION = "1.1"
+REPORT_VERSION = "1.2"
 
 
 def _thresholds_fingerprint():
@@ -87,9 +89,20 @@ def _pack_replay(rd, an):
         # nearest-sample for discrete surf (interp would corrupt the nibbles)
         near = np.clip(np.searchsorted(t, grid), 0, len(t) - 1)
         surf = f["surf"][near]
+        # spline wraps 1->0 at the line: unwrap before interpolating, else grid
+        # points inside the wrap get garbage mid-values (0.27 etc.), which breaks
+        # lap slicing in the driving-analysis tab
+        spl = f["spline"].astype(np.float64)
+        dsp = np.diff(spl)
+        steps = np.where(dsp < -0.5, 1.0, np.where(dsp > 0.5, -1.0, 0.0))
+        unwrapped = spl.copy()
+        unwrapped[1:] += np.cumsum(steps)
+        spline_g = np.mod(np.interp(grid, t, unwrapped), 1.0)
 
         nd = [np.clip(rs(f[k]) * 20, 0, 255).astype(np.uint8)
               for k in ("nd0", "nd1", "nd2", "nd3")]
+        acc_x = np.clip(np.nan_to_num(rs(f["acc_x"])) * 100, -31000, 31000).astype(np.int16)
+        acc_z = np.clip(np.nan_to_num(rs(f["acc_z"])) * 100, -31000, 31000).astype(np.int16)
 
         rows = zip(x, z,
                    np.clip(heading * 1000, -31000, 31000).astype(np.int16),
@@ -99,13 +112,15 @@ def _pack_replay(rd, an):
                    np.clip(rs(f["steer"]) * 10, -31000, 31000).astype(np.int16),
                    gear, out, nd[0], nd[1], nd[2], nd[3], surf,
                    np.clip(beta * 10, -31000, 31000).astype(np.int16),
-                   np.clip(rs(f["spline"]) * 65535, 0, 65535).astype(np.uint16))
+                   np.clip(spline_g * 65535, 0, 65535).astype(np.uint16),
+                   acc_x, acc_z)
         base = ci * n * STRIDE
-        pk = struct.Struct("<ffhHBBhbB4BHhH").pack_into
-        for k, (xx, zz, hh, ss, g8, b8, st, gr, ot, n0, n1, n2, n3, sf, bt, spn) in enumerate(rows):
+        pk = struct.Struct("<ffhHBBhbB4BHhHhh").pack_into
+        for k, (xx, zz, hh, ss, g8, b8, st, gr, ot, n0, n1, n2, n3, sf, bt, spn, ax, az) in enumerate(rows):
             pk(buf, base + k * STRIDE, float(xx), float(zz), int(hh), int(ss),
                int(g8), int(b8), int(st), int(gr), int(ot),
-               int(n0), int(n1), int(n2), int(n3), int(sf), int(bt), int(spn))
+               int(n0), int(n1), int(n2), int(n3), int(sf), int(bt), int(spn),
+               int(ax), int(az))
 
     return {"n": n, "dt": dt, "stride": STRIDE, "cars": C}, bytes(buf)
 
@@ -176,6 +191,7 @@ def build_payload(rd, an, tm):
         mid = (c["s0"] + c["s1"]) / 2
         i = tm.idx_at(mid)
         labels.append({"n": c["n"], "name": c["name"],
+                       "s0": round(float(c["s0"]), 5), "s1": round(float(c["s1"]), 5),
                        "x": round(float(tm.pts[i, 0]), 1), "z": round(float(tm.pts[i, 2]), 1)})
     sf = tm.idx_at(0.0)
 

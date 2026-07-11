@@ -64,13 +64,21 @@ python analyzer/vrclog_report.py examples/vrclog_20260709_000356_spa-layout_f1_2
 * **Lap times** — per-driver lap trend (in/out laps and outliers marked), cumulative gap to
   leader by lap, clean-lap pace statistics (average, standard deviation) with a click-to-toggle
   legend.
+* **Driving** — MoTeC-style distance-domain lap comparison against a selectable reference lap
+  (session best / own best / any driver's any lap): speed + throttle/brake traces with corner
+  bands, a cumulative Δt line showing *where* time is lost, a corner-by-corner table (brake
+  point, entry/apex speed, back-to-throttle point, corner time, brake-point consistency σ),
+  driving-style metrics (coasting, full-throttle, trail-braking, time over the grip peak),
+  a G-G diagram and a micro-sector heatmap across all laps. Click any chart to jump into the
+  replay at that exact moment.
 * **Timeline** — one swimlane per driver: incident dots (click → jump into replay), pit-stop
   blocks, DNF markers, caution bands, and a grip/rain strip along the bottom.
 * **Incidents** — one card per episode: severity score, per-car narrative chain
   (`contact with X → spun → off track → stuck 12s → retired`), ranked evidence with confidence
   values, speed/brake sparkline, one-click jump into the replay.
 * **Replay** — 2D top-down map with the real track ribbon, all cars with heading + fading trails,
-  follow-cam, live standings with gaps, per-wheel telemetry (ndSlip, surface type, inputs, β),
+  follow-cam, live standings with gaps, per-wheel telemetry (ndSlip, surface type, inputs, β)
+  with a live scrolling input trace, a full-race throttle/brake ribbon under the scrubber,
   lap-tick scrubber, 1–32× playback. Mouse wheel / pinch zoom, drag to pan, touch-friendly.
 
 ### Incident attribution
