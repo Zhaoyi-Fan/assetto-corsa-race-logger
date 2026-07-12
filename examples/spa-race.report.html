@@ -1416,22 +1416,27 @@ function drawTelStrip(){
   const strip = document.getElementById("telstrip");
   const w = strip.parentElement.clientWidth - 26;
   if (w <= 40 || !DV) return;
-  if (strip.width !== Math.round(w * devicePixelRatio)){
-    strip.width = w * devicePixelRatio; strip.height = 64 * devicePixelRatio;
+  // resize (clears the canvas) only on real layout changes, not 1px jitter
+  const targetW = Math.round(w * devicePixelRatio);
+  if (Math.abs(strip.width - targetW) > 2){
+    strip.width = targetW; strip.height = 64 * devicePixelRatio;
     strip.style.width = w + "px"; strip.style.height = "64px";
   }
   const c = strip.getContext("2d");
   c.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
   c.clearRect(0, 0, w, 64);
   const SPAN = 12, ci = selected;
+  // interpolate between samples: nearest-sample lookup makes pixel columns flip
+  // between adjacent 15 Hz samples as simT advances (temporal aliasing = strobing)
   const path = (get, color, lw) => {
     c.strokeStyle = color; c.lineWidth = lw; c.beginPath();
     let started = false;
-    for (let px = 0; px <= w; px += 2){
+    for (let px = 0; px <= w; px++){
       const t = simT - SPAN + px / w * SPAN;
       if (t < 0){ started = false; continue; }
-      const k = Math.min(N-1, Math.max(0, Math.round(t / DT)));
-      const y = get(k);
+      const fi = Math.min(N - 1.001, Math.max(0, t / DT));
+      const k = Math.floor(fi), f = fi - k;
+      const y = get(k) * (1 - f) + get(k + 1) * f;
       started ? c.lineTo(px, y) : c.moveTo(px, y);
       started = true;
     }
@@ -1494,7 +1499,12 @@ function updatePanels(){
         <td style="color:var(--dim)">${inPit && !r.dnf ? "PIT" : gap}</td></tr>`;
     }).join("");
   }
-  // telemetry (selected car) every frame
+  // telemetry text at ~10 Hz (a full innerHTML rewrite every frame churns layout
+  // around the live strip below); the strip itself stays per-frame
+  if (updatePanels._t2 && performance.now() - updatePanels._t2 < 100
+      && updatePanels._lastCi === selected) return;
+  updatePanels._t2 = performance.now();
+  updatePanels._lastCi = selected;
   const ci = selected, k = Math.floor(idxAt(simT));
   const st = carState(ci, simT);
   const gear = chan.gear(ci,k), beta = chan.beta(ci,k), out = chan.out(ci,k);
