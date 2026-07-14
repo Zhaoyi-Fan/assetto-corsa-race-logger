@@ -1,49 +1,20 @@
 {
   "track": "monaco_2020/monaco_f1_2025",
-  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "comment": "Recalibrated 2026-07-14 to official F1 19-corner numbering. Spline anchors from this track's own stock fast_lane.ai geometric curvature scan (local radius minima). Key anchor: Grand Hotel Hairpin apex s=0.380 (global-min radius 10.8 m), independently confirmed by the r6 race jam clustering at spline 0.364-0.385. Prior (2026-07-09) config buried the hairpin inside a '5-6 Mirabeau/Hairpin' 0.327-0.449 block and mislabelled the tunnel as 'Portier' at 0.494-0.545 - both fixed. Tight chicane/pool corners grouped where a single curvature min covers several.",
   "corners": [
-    {
-      "n": "1",
-      "name": "Ste Devote",
-      "s0": 0.05,
-      "s1": 0.082
-    },
-    {
-      "n": "3-4",
-      "name": "Massenet / Casino",
-      "s0": 0.201,
-      "s1": 0.295
-    },
-    {
-      "n": "5-6",
-      "name": "Mirabeau / Hairpin",
-      "s0": 0.327,
-      "s1": 0.449
-    },
-    {
-      "n": "7-8",
-      "name": "Portier",
-      "s0": 0.494,
-      "s1": 0.545
-    },
-    {
-      "n": "10-11",
-      "name": "Nouvelle Chicane",
-      "s0": 0.618,
-      "s1": 0.661
-    },
-    {
-      "n": "12-14",
-      "name": "Tabac / Piscine",
-      "s0": 0.701,
-      "s1": 0.789
-    },
-    {
-      "n": "15-19",
-      "name": "Piscine / Rascasse / Noghes",
-      "s0": 0.799,
-      "s1": 0.924
-    }
+    { "n": "1",     "name": "Sainte Devote",          "s0": 0.050, "s1": 0.085, "dir": "R"  },
+    { "n": "2-3",   "name": "Beau Rivage / Massenet",  "s0": 0.198, "s1": 0.242, "dir": "L"  },
+    { "n": "4",     "name": "Casino",                  "s0": 0.242, "s1": 0.292, "dir": "R"  },
+    { "n": "5",     "name": "Mirabeau Haute",          "s0": 0.325, "s1": 0.362, "dir": "R"  },
+    { "n": "6",     "name": "Grand Hotel Hairpin",     "s0": 0.362, "s1": 0.393, "dir": "R"  },
+    { "n": "7",     "name": "Mirabeau Bas",            "s0": 0.393, "s1": 0.415, "dir": "R"  },
+    { "n": "8",     "name": "Portier",                 "s0": 0.415, "s1": 0.450, "dir": "R"  },
+    { "n": "9",     "name": "Tunnel",                  "s0": 0.470, "s1": 0.610, "dir": "R"  },
+    { "n": "10-11", "name": "Nouvelle Chicane",        "s0": 0.615, "s1": 0.665, "dir": "RL" },
+    { "n": "12",    "name": "Tabac",                   "s0": 0.693, "s1": 0.732, "dir": "L"  },
+    { "n": "13-16", "name": "Piscine (Swimming Pool)", "s0": 0.760, "s1": 0.858, "dir": "LR" },
+    { "n": "17-18", "name": "La Rascasse",             "s0": 0.858, "s1": 0.892, "dir": "R"  },
+    { "n": "19",    "name": "Anthony Noghes",          "s0": 0.892, "s1": 0.918, "dir": "R"  }
   ],
   "straights": []
 }
