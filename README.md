@@ -19,7 +19,8 @@ offline, share a link. This project applies the same idea to Assetto Corsa:
 
 1. **Record everything, always.** A lightweight in-game app continuously samples the full physics
    state of *every* car (offline AI run full local physics, so their data is as complete as the
-   player's) plus every discrete event — collisions, laps, pit stops, resets, flags.
+   player's) plus every discrete event — collisions, laps, pit stops, resets, flags,
+   race-start reaction times.
 2. **Analyze offline.** A Python pipeline detects losses of control (spin / slide / understeer-off /
    oversteer-off / stuck), groups them into multi-car *episodes*, and builds an evidence-based
    cause chain for each one.
@@ -59,7 +60,8 @@ python analyzer/vrclog_report.py examples/vrclog_20260709_000356_spa-layout_f1_2
 
 ### The report
 
-* **Overview** — results, best laps, pit-stop table (lap / stationary time / tyre change),
+* **Overview** — results, best laps, start reaction times (green light → first movement,
+  best highlighted, jump starts flagged), pit-stop table (lap / stationary time / tyre change),
   positions-by-lap chart, loss-of-control corner hotspots.
 * **Lap times** — per-driver lap trend (in/out laps and outliers marked), cumulative gap to
   leader by lap, clean-lap pace statistics (average, standard deviation) with a click-to-toggle

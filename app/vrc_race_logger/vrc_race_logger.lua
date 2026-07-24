@@ -10,7 +10,8 @@
 --   * W lines (every 5 s): ambient/road temp, grip, rain, wind, race flag.
 --   * EV lines (event-driven, never missed between samples): collisions (with nearest-car
 --     attribution + relative speed), laps (time/validity/cuts/splits), car resets/jumps,
---     pit in/out, box in/out, finish/retire, flag changes.
+--     pit in/out, box in/out, finish/retire, flag changes, race-start reaction (green
+--     light moment + per-car first-throttle / first-movement deltas).
 --   * Header: META json (track, session, rates) + one CAR json per entry (driver, car,
 --     skin, aiLevel, aiAggression, ballast, restrictor).
 --
@@ -28,7 +29,7 @@
 -- ============================================================================
 
 local SCHEMA_VERSION = 1
-local APP_VERSION    = '1.2'
+local APP_VERSION    = '1.3'
 
 local SESSION_NAMES = {
   [0] = 'session', [1] = 'practice', [2] = 'qualify', [3] = 'race',
@@ -55,6 +56,16 @@ local MERGE_WAIT_MAX_S = 5.0             -- max time to wait for in-flight chunk
 -- avg 302 km/h) — rate-limit those per car; real car-car contacts keep the tight window.
 local COLL_DEDUP_CAR_S   = 0.25  -- min gap between logged car-car collisions of same pair
 local COLL_DEDUP_TRACK_S = 2.0   -- min gap per car for track/floor contacts (raw == 0)
+-- Race-start reaction tracking (V1.3). Green light = sim.timeToSessionStart crossing
+-- zero (interpolated inside the frame, so precision beats the frame rate). Reaction =
+-- green -> first movement (both thresholds must hold, so a lone numeric speed blip
+-- while parked can't fire it); throttle delta logged separately. Cars already moving
+-- at green (rolling start / jump start) get delta -1.
+local START_GAS_MIN    = 0.05  -- gas above this = throttle applied
+local START_SPEED_KMH  = 1.0   -- movement: speed above this...
+local START_DIST_M     = 0.01  -- ...AND at least this far from the green-light spot
+local START_MOVING_KMH = 2.0   -- already faster than this at green = moving (delta -1)
+local START_WINDOW_S   = 60    -- stop waiting for launches this long after green
 
 -- ---- paths ------------------------------------------------------------------
 local logsDir     = ac.getFolder(ac.FolderID.Root) .. '\\logs'
@@ -93,6 +104,9 @@ local prevFlag           = -1
 -- per-car transition trackers
 local prevInPitlane, prevInPit, prevRetired, prevFinished = {}, {}, {}, {}
 local lastCollAt = {}   -- [key "i:otherRaw:nearest"] = sim.time seconds of last logged hit
+-- race-start reaction tracker; nil = inactive (non-race session / green handled / window over)
+-- {prev = last timeToSessionStart, green = sim.time of green light, cars = {[i] = {...}}}
+local startTrack = nil
 
 local statusText = 'Idle'
 local fmt = string.format
@@ -233,6 +247,9 @@ local function startRecording(sim)
   prevInPitlane, prevInPit, prevRetired, prevFinished = {}, {}, {}, {}
   lastCollAt = {}
   prevFlag = sim.raceFlagType
+  -- arm start-reaction tracking for race sessions only; stays inert until a real
+  -- positive->zero countdown transition is seen (so joining mid-race logs nothing)
+  startTrack = (session and session.type == 3) and {prev = nil, green = nil, cars = {}} or nil
 
   writeHeader(sim, session)
   -- crash pointer: if AC dies, next launch finds this and merges the leftovers
@@ -523,6 +540,67 @@ function script.update(dt)
   if sim.isPaused or sim.isReplayActive or sim.isInMainMenu or sim.dt <= 0 then return end
 
   local t = relT(sim)
+
+  -- race-start reaction ------------------------------------------------------------------
+  if startTrack ~= nil then
+    if startTrack.green == nil then
+      local tts = sim.timeToSessionStart
+      if startTrack.prev ~= nil and startTrack.prev > 0 and tts <= 0 then
+        -- green light happened inside this frame; tts is the (negative) overshoot, so
+        -- sim.time + tts recovers the exact moment (clamped in case the field parks at -1)
+        startTrack.green = sim.time + math.max(tts, -50)
+        local greenT = math.max(0, math.floor(startTrack.green - t0 + 0.5))
+        local moving = 0
+        for i = 0, sim.carsCount - 1 do
+          local c = ac.getCar(i)
+          if c ~= nil and c.isActive then
+            local isMoving = c.speedKmh > START_MOVING_KMH
+            if isMoving then moving = moving + 1 end
+            startTrack.cars[i] = {x = c.position.x, z = c.position.z,
+                                  gasDone = c.gas > START_GAS_MIN, moveDone = isMoving}
+          end
+        end
+        put(fmt('EV,%d,GREEN,%d', greenT, moving))
+        for i, st in pairs(startTrack.cars) do
+          -- throttle already applied at green = preloaded (delta 0); already moving at
+          -- green (rolling start / jump start) = no standing reaction exists (delta -1)
+          if st.gasDone  then put(fmt('EV,%d,LAUNCH,%d,0,0', greenT, i)) end
+          if st.moveDone then put(fmt('EV,%d,LAUNCH,%d,1,-1', greenT, i)) end
+        end
+        lastEvent = fmt('GREEN (%d cars already moving)', moving)
+      else
+        startTrack.prev = tts
+      end
+    else
+      local sinceGreen = sim.time - startTrack.green
+      local allDone = true
+      for i, st in pairs(startTrack.cars) do
+        if not (st.gasDone and st.moveDone) then
+          local c = ac.getCar(i)
+          if c == nil or not c.isActive then
+            st.gasDone, st.moveDone = true, true  -- car vanished: stop waiting for it
+          else
+            local delta = math.floor(sinceGreen + 0.5)
+            if not st.gasDone and c.gas > START_GAS_MIN then
+              st.gasDone = true
+              put(fmt('EV,%d,LAUNCH,%d,0,%d', t, i, delta))
+            end
+            if not st.moveDone and c.speedKmh > START_SPEED_KMH then
+              local dx, dz = c.position.x - st.x, c.position.z - st.z
+              if dx * dx + dz * dz > START_DIST_M * START_DIST_M then
+                st.moveDone = true
+                put(fmt('EV,%d,LAUNCH,%d,1,%d', t, i, delta))
+                lastEvent = fmt('LAUNCH car %d +%d ms', i, delta)
+              end
+            end
+            if not (st.gasDone and st.moveDone) then allDone = false end
+          end
+        end
+      end
+      if allDone or sinceGreen > START_WINDOW_S * 1000 then startTrack = nil end
+    end
+  end
+
   local fastPeriod = 1 / math.max(5, math.min(30, cfg.fastHz))
 
   fastAcc = fastAcc + sim.dt

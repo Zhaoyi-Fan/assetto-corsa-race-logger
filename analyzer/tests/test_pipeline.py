@@ -71,7 +71,7 @@ def write_ai(path):
 
 def build_log():
     lines = [
-        "VRCLOG,1,1.2-test",
+        "VRCLOG,1,1.3-test",
         'META,{"schema":1,"date":"2026-07-10 12:00:00","track":"stadium",'
         '"trackFull":"stadium/gp","trackName":"Stadium GP","trackLengthM":%.1f,'
         '"sessionIndex":0,"sessionType":3,"sessionName":"race","laps":3,'
@@ -163,6 +163,16 @@ def build_log():
             lines.append("W,%d,22.0,30.0,0.980,0.000,0.000,5.0,180,%d"
                          % (t_ms, 2 if T_OFF + 1 <= t <= 55.0 else 0))
 
+    # race start (V1.3): green at t=2 s; car 0 preloaded throttle, car 1 jump-started,
+    # car 2 best reaction 198 ms, car 3 (absent) no launch data at all
+    lines.append("EV,2000,GREEN,1")
+    lines.append("EV,2000,LAUNCH,0,0,0")
+    lines.append("EV,2000,LAUNCH,1,1,-1")
+    lines.append("EV,2150,LAUNCH,2,0,150")
+    lines.append("EV,2180,LAUNCH,1,0,180")
+    lines.append("EV,2198,LAUNCH,2,1,198")
+    lines.append("EV,2260,LAUNCH,0,1,260")
+
     # events: contact pair, wall hit, caution, stuck-AI recovery DNF
     x1, z1 = pos_at(50.0 * T_CONTACT - 12.0)
     s1 = ((50.0 * T_CONTACT - 12.0) % L) / L
@@ -223,6 +233,29 @@ def main():
     rd2 = vrclog_parser.parse(parts)
     check(".parts input", len(rd2.F[0]["t"]) == len(rd.F[0]["t"]))
 
+    print("race start (V1.3)")
+    st = rd.start
+    check("start parsed", st is not None and abs(st["green_t"] - 2.0) < 1e-6
+          and st["moving"] == 1, str(st and (st["green_t"], st["moving"])))
+    if st:
+        check("car0 preloaded gas + react 260",
+              st["launch"][0] == {"react_ms": 260, "gas_ms": 0, "jumped": False},
+              str(st["launch"].get(0)))
+        check("car1 jump-started",
+              st["launch"][1]["jumped"] and st["launch"][1]["react_ms"] is None,
+              str(st["launch"].get(1)))
+        check("car2 best react 198",
+              st["launch"][2] == {"react_ms": 198, "gas_ms": 150, "jumped": False},
+              str(st["launch"].get(2)))
+        check("car3 no launch data", 3 not in st["launch"], str(list(st["launch"])))
+    # logs from pre-1.3 loggers (no GREEN/LAUNCH lines) must yield start = None
+    old_text = "\n".join(l for l in text.split("\n")
+                         if ",GREEN," not in l and ",LAUNCH," not in l)
+    old_path = os.path.join(tmp, "vrclog_old_version.txt")
+    with open(old_path, "w", encoding="utf-8") as f:
+        f.write(old_text)
+    check("pre-1.3 log -> start None", vrclog_parser.parse(old_path).start is None)
+
     print("track model")
     tm = track_model.load_fast_lane(ai_path)
     tm, med = track_model.pick_z_sign(tm, rd)
@@ -277,6 +310,14 @@ def main():
     payload, rep_bin = report_html.build_payload(rd, an, tm)
     check("weather in payload", len(payload["weather"]["t"]) >= 18)
     check("results has 4 cars", len(payload["results"]) == 4)
+    check("start in payload", payload["start"] is not None
+          and payload["start"]["rolling"] is False
+          and payload["start"]["green"] == 2.0, str(payload["start"]))
+    by_car = {r["car"]: r for r in payload["results"]}
+    check("react in results rows",
+          by_car[2]["react"] == 198 and by_car[2]["gas"] == 150
+          and by_car[1]["jump"] is True and by_car[3]["react"] is None,
+          str({c: (r["react"], r["gas"], r["jump"]) for c, r in by_car.items()}))
     out_html = os.path.join(tmp, "out.report.html")
     template = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                             "report_template.html")

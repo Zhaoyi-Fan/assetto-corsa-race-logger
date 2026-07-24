@@ -8,6 +8,11 @@ merged on finalize; `_rN` suffix = Nth session restart). `logs\_active_recording
 crash pointer (2 lines: partsDir, finalPath); if present at next AC launch, leftovers are merged
 automatically with `END reason=salvaged`.
 
+**App V1.3 additions (2026-07-24, additive only — schema stays 1):**
+- Race-start reaction tracking: one `GREEN` event at lights-out + per-car `LAUNCH` events
+  (first throttle / first movement deltas). Race sessions only; see GREEN/LAUNCH notes in the
+  EV section. Pre-1.3 files simply lack these lines — parsers must treat that as "no start data".
+
 **App V1.2 lifecycle changes (format unchanged, schema stays 1):**
 - Finalize waits for in-flight async chunk writes before merging and verifies the on-disk
   chunk count; if chunks are missing (write never landed / timeout), the `.parts` dir AND the
@@ -112,6 +117,8 @@ EV,t,BOX_IN,car   / EV,t,BOX_OUT,car    (parked in pit box → stop duration)
 EV,t,RETIRE,car
 EV,t,FINISH,car,racePosition
 EV,t,FLAG,flagType                       (transitions only)
+EV,t,GREEN,carsMoving                    ← V1.3+: race-start green light (see below)
+EV,t,LAUNCH,car,kind,deltaMs             ← V1.3+: per-car start reaction (see below)
 ```
 
 COLL notes — semantics **verified on real data (2026-07-09 spa race, 6,901 events)**:
@@ -126,6 +133,24 @@ COLL notes — semantics **verified on real data (2026-07-09 spa race, 6,901 eve
 - Dedup since **app V1.1**: car-car pairs 0.25 s, track contacts (raw=0) 2.0 s per car.
   (V1.0 files, e.g. the 2026-07-09 ones, have raw=0 deduped at 0.25 s → the flood is IN the data.)
 - Multi-car pileups appear as several COLL lines (one per car, each with its own nearest).
+
+GREEN/LAUNCH notes — **race-start reaction, app V1.3+ (2026-07-24), race sessions only**:
+- `GREEN` fires once when `sim.timeToSessionStart` crosses 0 during a recorded race session.
+  Its `t` is interpolated *inside* the frame (`sim.time + timeToSessionStart`, clamped at −50 ms),
+  so precision beats both the frame rate and the 15 Hz F grid. `carsMoving` = cars already above
+  2 km/h at that moment — **≥ half the field ⇒ rolling start**, standing-start reactions don't
+  exist (report hides the column; per-car LAUNCH kind 1 lines carry −1).
+- `LAUNCH` kind **0 = first throttle** (gas > 0.05): `deltaMs` from green, **0 = throttle already
+  applied at green** (pre-loaded / revving — normal for standing starts, AC physics-locks the
+  field until green so this is not a false start).
+- `LAUNCH` kind **1 = first movement** = the headline reaction-time number: first frame with
+  speed > 1 km/h **and** > 1 cm displacement from the green-light position (both required, so a
+  lone numeric speed blip while parked can't fire it). Detection latency ≈ 40–80 ms at F1 launch
+  accel + up to one render frame; the bias is identical for every car, so rankings are fair.
+  `deltaMs = −1` ⇒ already moving at green (jump start, or every car on a rolling start).
+- Cars that never move within **60 s** of green get **no kind-1 line** (stalled/AFK — analyzer
+  shows "—"). A missing GREEN line altogether = pre-1.3 log, joined mid-race, or no countdown
+  seen: parser must expose "no start data", never guess.
 
 ## Trailer
 

@@ -224,6 +224,8 @@ const I18N = {
     drvHeatH:"微分段热图", drvHeatHint:"每行一圈,每列 5% 赛段,颜色 = 与该车手该段最佳的差值(点击跳回放)",
     heatPit:"进站圈",
     resultsH:"比赛结果（记录结束时）", resultsQH:"结果（按最快圈排名）",
+    reactCol:"起步反应", reactHint:"绿灯 → 车辆首次位移（位移>1cm 且 >1km/h）；油门数据另存于日志",
+    jumpStart:"抢跑", reactNone:"—",
     lapChartH:"位置变化（按圈）", lapChartHQ:"过线顺序（排位赛参考）", hotspotsH:"失控热点弯角",
     pitsH:"进站", pitLapCol:"圈", pitDurCol:"静止", pitTyreCol:"轮胎", noPits:"无进站",
     lapTimesH:"圈速走势", gapH:"对头名累计差（按圈）", lapStatsH:"圈速统计",
@@ -264,6 +266,8 @@ const I18N = {
     drvHeatH:"Micro-sector heatmap", drvHeatHint:"one row per lap, 5% track segments, color = delta to this driver's best (click to replay)",
     heatPit:"pit lap",
     resultsH:"Results (at end of recording)", resultsQH:"Results (ranked by best lap)",
+    reactCol:"Reaction", reactHint:"green light → first car movement (>1 cm and >1 km/h); throttle deltas are in the log too",
+    jumpStart:"Jump", reactNone:"—",
     lapChartH:"Positions by lap", lapChartHQ:"Crossing order (quali, reference)", hotspotsH:"Loss-of-control hotspots",
     pitsH:"Pit stops", pitLapCol:"Lap", pitDurCol:"Stationary", pitTyreCol:"Tyres", noPits:"no pit stops",
     lapTimesH:"Lap times", gapH:"Gap to leader by lap", lapStatsH:"Pace stats",
@@ -432,7 +436,19 @@ window.goReplay = goReplay;
 function buildOverview(){
   const tb = document.getElementById("results");
   const pole = DATA.results.length ? DATA.results[0].best : 0;
-  tb.innerHTML = `<tr><th>#</th><th>${T("driverCol")}</th><th></th><th>${T("lapsCol")}</th><th>${T("bestCol")}</th><th>${T(IS_RACE ? "statusCol" : "gapCol")}</th></tr>` +
+  // start reaction column: race + V1.3+ log + standing start + at least one launch
+  const START_OK = IS_RACE && DATA.start && !DATA.start.rolling &&
+    DATA.results.some(r => r.react != null || r.jump);
+  const bestReact = START_OK ?
+    Math.min(...DATA.results.filter(r => r.react != null).map(r => r.react)) : Infinity;
+  const reactCell = r => {
+    if (r.jump) return `<td style="color:var(--bad)">${T("jumpStart")}</td>`;
+    if (r.react == null) return `<td style="color:var(--dim)">${T("reactNone")}</td>`;
+    const s = (r.react/1000).toFixed(3) + "s";
+    return r.react === bestReact ?
+      `<td><b style="color:var(--ok)">${s}</b></td>` : `<td>${s}</td>`;
+  };
+  tb.innerHTML = `<tr><th>#</th><th>${T("driverCol")}</th><th></th><th>${T("lapsCol")}</th><th>${T("bestCol")}</th>${START_OK ? `<th title="${T("reactHint")}">${T("reactCol")}</th>` : ""}<th>${T(IS_RACE ? "statusCol" : "gapCol")}</th></tr>` +
     DATA.results.map((r,i) => {
       const c = carOf(r.car);
       let status;
@@ -444,7 +460,7 @@ function buildOverview(){
         <td><span class="dot" style="background:${c.color}"></span>${esc(c.driver)}</td>
         <td style="color:var(--dim)">${c.ai ? "AI "+(c.aiLevel*100).toFixed(0) : T("player")}</td>
         <td>${r.laps}</td><td>${fmtLap(r.best)}</td>
-        <td>${status}</td></tr>`;
+        ${START_OK ? reactCell(r) : ""}<td>${status}</td></tr>`;
     }).join("");
 
   const hs = document.getElementById("hotspots");

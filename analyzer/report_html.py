@@ -31,7 +31,7 @@ import thresholds as th
 
 STRIDE = 32
 REPLAY_HZ = 15.0
-REPORT_VERSION = "1.2"
+REPORT_VERSION = "1.3"
 
 
 def _thresholds_fingerprint():
@@ -142,14 +142,19 @@ def build_payload(rd, an, tm):
 
     # standings: last known race position; retired flagged
     retired = set(an.dnfs)
+    start = getattr(rd, "start", None)  # V1.3+ logs only
+    launch = start["launch"] if start else {}
     last_pos = []
     for ci in range(C):
         s = rd.S[ci]
         pos = int(s["race_pos"][-1]) if len(s["race_pos"]) else ci + 1
         laps_done = len(rd.laps_of(ci))
         best = min([l["lap_ms"] for l in rd.laps_of(ci)], default=0)
+        lc = launch.get(ci, {})
         last_pos.append({"car": ci, "pos": pos, "laps": laps_done, "best": best,
-                         "dnf": ci in retired})
+                         "dnf": ci in retired,
+                         "react": lc.get("react_ms"), "gas": lc.get("gas_ms"),
+                         "jump": bool(lc.get("jumped"))})
     if rd.meta.get("sessionName", "race") == "race":
         results = sorted(last_pos, key=lambda r: (r["dnf"], r["pos"]))
     else:  # quali/practice: race position is meaningless — rank by best lap
@@ -231,6 +236,10 @@ def build_payload(rd, an, tm):
         },
         "cars": cars,
         "results": results,
+        # rolling = most of the field already moving at green: standing-start reaction
+        # times don't exist, so the template hides the column entirely
+        "start": {"green": round(start["green_t"], 2), "moving": start["moving"],
+                  "rolling": start["moving"] >= max(2, C // 2)} if start else None,
         "laps": laps,
         "posByLap": pos_by_lap,
         "pits": pits,

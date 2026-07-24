@@ -51,6 +51,7 @@ class RaceData:
         self.events = []            # every other EV as dicts: {t, type, car, ...}
         self.end = {}               # END json (may be missing on salvaged tails)
         self.duration = 0.0         # seconds, last seen t
+        self.start = None           # V1.3+ race start: {green_t, moving, launch:{car:{...}}}
 
     # -- convenience -------------------------------------------------------------
     def driver(self, i):
@@ -141,6 +142,12 @@ def parse(path):
                 elif et == "JUMP":
                     rd.events.append({"t": t, "type": "JUMP", "car": int(p[3]),
                                       "reset_n": int(p[4]) if len(p) > 4 else 0})
+                elif et == "GREEN":   # V1.3+: race start (green light) moment
+                    rd.events.append({"t": t, "type": "GREEN",
+                                      "moving": int(p[3]) if len(p) > 3 else 0})
+                elif et == "LAUNCH":  # V1.3+: kind 0 = first throttle, 1 = first movement
+                    rd.events.append({"t": t, "type": "LAUNCH", "car": int(p[3]),
+                                      "kind": int(p[4]), "delta_ms": int(p[5])})
                 else:
                     rd.events.append({"t": t, "type": et, "raw": p[3:]})
             elif kind == "META":
@@ -219,8 +226,35 @@ def parse(path):
             [(surf >> 12) & 0xF, (surf >> 8) & 0xF, (surf >> 4) & 0xF, surf & 0xF],
             axis=1).astype(np.uint8) if len(surf) else np.zeros((0, 4), np.uint8)
 
+    _build_start(rd)
     _align_grids(rd)
     return rd
+
+
+def _build_start(rd):
+    """V1.3+ GREEN/LAUNCH events -> rd.start (None on older logs: feature undetectable).
+
+    launch[car] = {react_ms: green->first movement (None = never moved on record),
+                   gas_ms: green->first throttle (0 = preloaded at green),
+                   jumped: already moving at green (rolling start or jump start)}
+    """
+    greens = [e for e in rd.events if e["type"] == "GREEN"]
+    if not greens:
+        return
+    g = greens[0]  # one per file by construction; first wins on torn/salvaged concats
+    launch = {}
+    for e in rd.events:
+        if e["type"] != "LAUNCH":
+            continue
+        d = launch.setdefault(e["car"], {"react_ms": None, "gas_ms": None, "jumped": False})
+        if e["kind"] == 0 and d["gas_ms"] is None:
+            d["gas_ms"] = e["delta_ms"]
+        elif e["kind"] == 1 and d["react_ms"] is None:
+            if e["delta_ms"] < 0:
+                d["jumped"] = True
+            else:
+                d["react_ms"] = e["delta_ms"]
+    rd.start = {"green_t": g["t"], "moving": g["moving"], "launch": launch}
 
 
 def _align_grids(rd):
@@ -280,6 +314,12 @@ def summary(rd):
     ec = rd.ev_coll
     lines.append(f"  COLL={len(ec['t'])} (car-car={int((ec['raw'] > 0).sum())}) "
                  f"LAP={len(rd.ev_lap)} other EV={len(rd.events)} W={len(rd.W['t'])}")
+    if rd.start:
+        reacts = sorted((v["react_ms"], c) for c, v in rd.start["launch"].items()
+                        if v["react_ms"] is not None)
+        best = f"best {reacts[0][0]} ms ({rd.driver(reacts[0][1])})" if reacts else "no launches"
+        lines.append(f"  START green@{rd.start['green_t']:.2f}s "
+                     f"moving-at-green={rd.start['moving']} {best}")
     return "\n".join(lines)
 
 
