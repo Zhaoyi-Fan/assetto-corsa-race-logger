@@ -1,48 +1,54 @@
 {
   "track": "shanghai_v2_25/layout_f1_2025",
-  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "comment": "Re-curated 2026-08-04: per-corner split via fast_lane.ai curvature re-scan (passes r<250 m + r<600 m, merge_gap 8 m); 2025 numbering/names per claudelogs/2026-08-04_corner-names-research-review.md (user-ruled D1-D5). Complexes stay merged where the line shows one continuous bowl. Corners officially numbered-only; Snail (1-4) famous nickname kept (D2); T5 from weak pass; 7-8 / 9-10 / 11-13 continuous bowls stay merged.",
   "corners": [
     {
       "n": "1-4",
       "name": "Snail",
-      "s0": 0.086,
-      "s1": 0.205
+      "s0": 0.091,
+      "s1": 0.201
+    },
+    {
+      "n": "5",
+      "name": "",
+      "s0": 0.224,
+      "s1": 0.256
     },
     {
       "n": "6",
       "name": "",
-      "s0": 0.281,
-      "s1": 0.317
+      "s0": 0.285,
+      "s1": 0.313
     },
     {
       "n": "7-8",
       "name": "",
-      "s0": 0.347,
-      "s1": 0.408
+      "s0": 0.351,
+      "s1": 0.404
     },
     {
       "n": "9-10",
       "name": "",
-      "s0": 0.41,
-      "s1": 0.505
+      "s0": 0.414,
+      "s1": 0.501
     },
     {
       "n": "11-13",
-      "name": "Snail 2",
-      "s0": 0.566,
-      "s1": 0.662
+      "name": "",
+      "s0": 0.57,
+      "s1": 0.658
     },
     {
       "n": "14",
       "name": "Hairpin",
-      "s0": 0.871,
-      "s1": 0.904
+      "s0": 0.875,
+      "s1": 0.9
     },
     {
       "n": "15-16",
       "name": "",
-      "s0": 0.937,
-      "s1": 0.963
+      "s0": 0.941,
+      "s1": 0.959
     }
   ],
   "straights": []

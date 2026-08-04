@@ -1,54 +1,72 @@
 {
   "track": "fn_barcelona/layout_gp_2025_fnr",
-  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "comment": "Re-curated 2026-08-04: per-corner split via fast_lane.ai curvature re-scan (passes r<250 m + r<600 m, merge_gap 8 m); 2025 numbering/names per claudelogs/2026-08-04_corner-names-research-review.md (user-ruled D1-D5). Complexes stay merged where the line shows one continuous bowl. T2 fast left invisible (merged into 1-2); T6 weak-pass kink; final corner (ex-T16) keeps New Holland name in the 14-turn no-chicane layout.",
   "corners": [
     {
-      "n": "1-3",
-      "name": "",
-      "s0": 0.169,
-      "s1": 0.307
+      "n": "1-2",
+      "name": "Elf",
+      "s0": 0.173,
+      "s1": 0.222
+    },
+    {
+      "n": "3",
+      "name": "Renault",
+      "s0": 0.227,
+      "s1": 0.304
     },
     {
       "n": "4",
-      "name": "",
-      "s0": 0.354,
-      "s1": 0.421
+      "name": "Repsol",
+      "s0": 0.358,
+      "s1": 0.417
     },
     {
       "n": "5",
+      "name": "Seat",
+      "s0": 0.448,
+      "s1": 0.481
+    },
+    {
+      "n": "6",
       "name": "",
-      "s0": 0.444,
-      "s1": 0.485
+      "s0": 0.491,
+      "s1": 0.499
     },
     {
       "n": "7",
+      "name": "Würth",
+      "s0": 0.539,
+      "s1": 0.564
+    },
+    {
+      "n": "8",
       "name": "",
-      "s0": 0.535,
-      "s1": 0.588
+      "s0": 0.568,
+      "s1": 0.584
     },
     {
       "n": "9",
       "name": "Campsa",
-      "s0": 0.605,
-      "s1": 0.649
+      "s0": 0.61,
+      "s1": 0.645
     },
     {
       "n": "10-11",
       "name": "La Caixa",
-      "s0": 0.741,
-      "s1": 0.846
+      "s0": 0.745,
+      "s1": 0.842
     },
     {
       "n": "12",
-      "name": "",
-      "s0": 0.858,
-      "s1": 0.9
+      "name": "Banc Sabadell",
+      "s0": 0.862,
+      "s1": 0.896
     },
     {
       "n": "13-14",
-      "name": "",
-      "s0": 0.914,
-      "s1": 0.963
+      "name": "New Holland",
+      "s0": 0.918,
+      "s1": 0.959
     }
   ],
   "straights": []

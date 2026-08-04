@@ -1,54 +1,84 @@
 {
   "track": "zandvoort2023/layout_f1_2025",
-  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "comment": "Re-curated 2026-08-04: per-corner split via fast_lane.ai curvature re-scan (passes r<250 m + r<600 m, merge_gap 8 m); 2025 numbering/names per claudelogs/2026-08-04_corner-names-research-review.md (user-ruled D1-D5). Complexes stay merged where the line shows one continuous bowl. 2/3 fixed (old file had Gerlach labeled Hugenholtz); 6 Slotemaker restored; 9 covers two sub-bowls; 10 CM.com is the current sponsor name (ex-Vodafone).",
   "corners": [
     {
       "n": "1",
       "name": "Tarzan",
-      "s0": 0.053,
-      "s1": 0.101
+      "s0": 0.057,
+      "s1": 0.097
     },
     {
-      "n": "2-3",
+      "n": "2",
+      "name": "Gerlach",
+      "s0": 0.137,
+      "s1": 0.163
+    },
+    {
+      "n": "3",
       "name": "Hugenholtz",
-      "s0": 0.12,
-      "s1": 0.213
+      "s0": 0.171,
+      "s1": 0.209
     },
     {
       "n": "4",
-      "name": "",
-      "s0": 0.227,
-      "s1": 0.249
+      "name": "Hunzerug",
+      "s0": 0.232,
+      "s1": 0.246
     },
     {
       "n": "5",
       "name": "",
-      "s0": 0.264,
-      "s1": 0.301
+      "s0": 0.268,
+      "s1": 0.277
+    },
+    {
+      "n": "6",
+      "name": "Rob Slotemaker",
+      "s0": 0.282,
+      "s1": 0.297
     },
     {
       "n": "7",
       "name": "Scheivlak",
-      "s0": 0.355,
-      "s1": 0.425
+      "s0": 0.359,
+      "s1": 0.421
     },
     {
-      "n": "8-10",
+      "n": "8",
+      "name": "Masters",
+      "s0": 0.438,
+      "s1": 0.493
+    },
+    {
+      "n": "9",
       "name": "",
-      "s0": 0.434,
-      "s1": 0.614
+      "s0": 0.498,
+      "s1": 0.547
+    },
+    {
+      "n": "10",
+      "name": "CM.com",
+      "s0": 0.554,
+      "s1": 0.61
     },
     {
       "n": "11-12",
       "name": "Hans Ernst",
-      "s0": 0.705,
-      "s1": 0.76
+      "s0": 0.709,
+      "s1": 0.756
     },
     {
-      "n": "13-14",
-      "name": "Arie Luyendyk (banked)",
-      "s0": 0.795,
-      "s1": 0.903
+      "n": "13",
+      "name": "",
+      "s0": 0.799,
+      "s1": 0.833
+    },
+    {
+      "n": "14",
+      "name": "Arie Luyendyk",
+      "s0": 0.842,
+      "s1": 0.899
     }
   ],
   "straights": []

@@ -1,48 +1,60 @@
 {
   "track": "vhe_interlagos/layout_f1_2025",
-  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "comment": "Re-curated 2026-08-04: per-corner split via fast_lane.ai curvature re-scan (passes r<250 m + r<600 m, merge_gap 8 m); 2025 numbering/names per claudelogs/2026-08-04_corner-names-research-review.md (user-ruled D1-D5). Complexes stay merged where the line shows one continuous bowl. Names re-anchored to official numbering (Mercedes AMG F1 corner-name article) - the 2026-07-09 file was shifted one turn. 8-9 and 10-11 share bowls; 15 from weak pass.",
   "corners": [
     {
-      "n": "1-3",
-      "name": "Senna S / Curva do Sol",
-      "s0": 0.046,
-      "s1": 0.168
+      "n": "1-2",
+      "name": "S do Senna",
+      "s0": 0.05,
+      "s1": 0.1
     },
     {
-      "n": "4",
+      "n": "3",
+      "name": "Curva do Sol",
+      "s0": 0.102,
+      "s1": 0.164
+    },
+    {
+      "n": "4-5",
       "name": "Descida do Lago",
-      "s0": 0.296,
-      "s1": 0.371
+      "s0": 0.3,
+      "s1": 0.367
     },
     {
-      "n": "5-6",
+      "n": "6-7",
       "name": "Ferradura",
-      "s0": 0.438,
-      "s1": 0.506
+      "s0": 0.442,
+      "s1": 0.502
     },
     {
-      "n": "7-8",
+      "n": "8-9",
       "name": "Laranjinha / Pinheirinho",
-      "s0": 0.511,
-      "s1": 0.58
+      "s0": 0.516,
+      "s1": 0.576
     },
     {
-      "n": "9-10",
+      "n": "10-11",
       "name": "Bico de Pato / Mergulho",
-      "s0": 0.593,
-      "s1": 0.706
+      "s0": 0.597,
+      "s1": 0.702
     },
     {
-      "n": "11-12",
-      "name": "Juncao",
-      "s0": 0.722,
-      "s1": 0.776
+      "n": "12",
+      "name": "Junção",
+      "s0": 0.726,
+      "s1": 0.772
     },
     {
-      "n": "13-15",
-      "name": "Subida / Arquibancadas",
-      "s0": 0.819,
-      "s1": 0.848
+      "n": "13-14",
+      "name": "Café / Subida dos Boxes",
+      "s0": 0.823,
+      "s1": 0.844
+    },
+    {
+      "n": "15",
+      "name": "Arquibancadas",
+      "s0": 0.908,
+      "s1": 0.931
     }
   ],
   "straights": []

@@ -1,54 +1,102 @@
 {
   "track": "ks_silverstone/silverstone_f1_2025",
-  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "comment": "Re-curated 2026-08-04: per-corner split via fast_lane.ai curvature re-scan (passes r<250 m + r<600 m, merge_gap 8 m); 2025 numbering/names per claudelogs/2026-08-04_corner-names-research-review.md (user-ruled D1-D5). Complexes stay merged where the line shows one continuous bowl. Maggotts/Becketts split per official numbering; T8 Woodcote and T16 Vale from weak pass (this AI line takes them shallow).",
   "corners": [
     {
       "n": "1",
       "name": "Abbey",
-      "s0": 0.033,
-      "s1": 0.068
+      "s0": 0.037,
+      "s1": 0.064
     },
     {
       "n": "2",
-      "name": "Farm",
-      "s0": 0.071,
-      "s1": 0.105
+      "name": "Farm Curve",
+      "s0": 0.075,
+      "s1": 0.097
     },
     {
-      "n": "3-5",
-      "name": "Village / Loop / Aintree",
-      "s0": 0.119,
-      "s1": 0.209
+      "n": "3",
+      "name": "Village",
+      "s0": 0.123,
+      "s1": 0.146
+    },
+    {
+      "n": "4",
+      "name": "The Loop",
+      "s0": 0.148,
+      "s1": 0.171
+    },
+    {
+      "n": "5",
+      "name": "Aintree",
+      "s0": 0.178,
+      "s1": 0.205
     },
     {
       "n": "6-7",
       "name": "Brooklands / Luffield",
-      "s0": 0.296,
-      "s1": 0.376
+      "s0": 0.3,
+      "s1": 0.373
+    },
+    {
+      "n": "8",
+      "name": "Woodcote",
+      "s0": 0.379,
+      "s1": 0.434
     },
     {
       "n": "9",
       "name": "Copse",
-      "s0": 0.486,
-      "s1": 0.525
+      "s0": 0.49,
+      "s1": 0.521
     },
     {
-      "n": "10-14",
-      "name": "Maggotts / Becketts",
-      "s0": 0.581,
-      "s1": 0.705
+      "n": "10",
+      "name": "Maggotts",
+      "s0": 0.585,
+      "s1": 0.589
+    },
+    {
+      "n": "11",
+      "name": "Maggotts",
+      "s0": 0.604,
+      "s1": 0.621
+    },
+    {
+      "n": "12",
+      "name": "Becketts",
+      "s0": 0.631,
+      "s1": 0.647
+    },
+    {
+      "n": "13",
+      "name": "Becketts",
+      "s0": 0.651,
+      "s1": 0.679
+    },
+    {
+      "n": "14",
+      "name": "Chapel",
+      "s0": 0.69,
+      "s1": 0.701
     },
     {
       "n": "15",
       "name": "Stowe",
-      "s0": 0.816,
-      "s1": 0.864
+      "s0": 0.82,
+      "s1": 0.86
     },
     {
-      "n": "16-18",
-      "name": "Vale / Club",
-      "s0": 0.907,
-      "s1": 0.976
+      "n": "16",
+      "name": "Vale",
+      "s0": 0.875,
+      "s1": 0.883
+    },
+    {
+      "n": "17-18",
+      "name": "Club",
+      "s0": 0.911,
+      "s1": 0.972
     }
   ],
   "straights": []

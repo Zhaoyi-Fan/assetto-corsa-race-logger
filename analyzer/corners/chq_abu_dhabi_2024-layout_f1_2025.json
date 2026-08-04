@@ -1,60 +1,90 @@
 {
   "track": "chq_abu_dhabi_2024/layout_f1_2025",
-  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "comment": "Re-curated 2026-08-04: per-corner split via fast_lane.ai curvature re-scan (passes r<250 m + r<600 m, merge_gap 8 m); 2025 numbering/names per claudelogs/2026-08-04_corner-names-research-review.md (user-ruled D1-D5). Complexes stay merged where the line shows one continuous bowl. Numbered-only circuit; T8/T15 are short kinks; hotel-section label dropped (D2).",
   "corners": [
     {
       "n": "1",
       "name": "",
-      "s0": 0.036,
-      "s1": 0.068
+      "s0": 0.04,
+      "s1": 0.064
     },
     {
-      "n": "2-4",
+      "n": "2-3",
       "name": "",
-      "s0": 0.08,
-      "s1": 0.157
+      "s0": 0.084,
+      "s1": 0.105
+    },
+    {
+      "n": "4",
+      "name": "",
+      "s0": 0.117,
+      "s1": 0.153
     },
     {
       "n": "5",
-      "name": "Hairpin",
-      "s0": 0.232,
-      "s1": 0.268
+      "name": "",
+      "s0": 0.236,
+      "s1": 0.264
     },
     {
       "n": "6-7",
-      "name": "Chicane",
-      "s0": 0.466,
-      "s1": 0.504
+      "name": "",
+      "s0": 0.47,
+      "s1": 0.5
     },
     {
-      "n": "9-10",
+      "n": "8",
       "name": "",
-      "s0": 0.654,
-      "s1": 0.723
+      "s0": 0.519,
+      "s1": 0.521
+    },
+    {
+      "n": "9",
+      "name": "",
+      "s0": 0.658,
+      "s1": 0.708
+    },
+    {
+      "n": "10",
+      "name": "",
+      "s0": 0.711,
+      "s1": 0.719
     },
     {
       "n": "11",
       "name": "",
-      "s0": 0.739,
-      "s1": 0.763
+      "s0": 0.743,
+      "s1": 0.759
     },
     {
-      "n": "12-13",
-      "name": "Hotel 段",
-      "s0": 0.765,
-      "s1": 0.871
-    },
-    {
-      "n": "14-15",
+      "n": "12",
       "name": "",
-      "s0": 0.877,
-      "s1": 0.922
+      "s0": 0.769,
+      "s1": 0.789
+    },
+    {
+      "n": "13",
+      "name": "",
+      "s0": 0.794,
+      "s1": 0.867
+    },
+    {
+      "n": "14",
+      "name": "",
+      "s0": 0.881,
+      "s1": 0.909
+    },
+    {
+      "n": "15",
+      "name": "",
+      "s0": 0.916,
+      "s1": 0.918
     },
     {
       "n": "16",
       "name": "",
-      "s0": 0.924,
-      "s1": 0.958
+      "s0": 0.928,
+      "s1": 0.954
     }
   ],
   "straights": []

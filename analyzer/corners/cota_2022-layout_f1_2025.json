@@ -1,66 +1,96 @@
 {
   "track": "cota_2022/layout_f1_2025",
-  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "comment": "Re-curated 2026-08-04: per-corner split via fast_lane.ai curvature re-scan (passes r<250 m + r<600 m, merge_gap 8 m); 2025 numbering/names per claudelogs/2026-08-04_corner-names-research-review.md (user-ruled D1-D5). Complexes stay merged where the line shows one continuous bowl. Numbered-only circuit; Esses nickname kept on 3-6 (D2); 13-15 stadium trio and 16-18 multi-apex stay merged (single/uncertain bowls).",
   "corners": [
     {
       "n": "1",
       "name": "",
-      "s0": 0.106,
-      "s1": 0.138
+      "s0": 0.11,
+      "s1": 0.134
     },
     {
       "n": "2",
       "name": "",
-      "s0": 0.141,
-      "s1": 0.187
+      "s0": 0.145,
+      "s1": 0.183
     },
     {
-      "n": "3-9",
+      "n": "3",
       "name": "Esses",
-      "s0": 0.201,
-      "s1": 0.374
+      "s0": 0.205,
+      "s1": 0.22
+    },
+    {
+      "n": "4",
+      "name": "Esses",
+      "s0": 0.225,
+      "s1": 0.237
+    },
+    {
+      "n": "5",
+      "name": "Esses",
+      "s0": 0.241,
+      "s1": 0.257
+    },
+    {
+      "n": "6",
+      "name": "Esses",
+      "s0": 0.262,
+      "s1": 0.299
+    },
+    {
+      "n": "7-8",
+      "name": "",
+      "s0": 0.303,
+      "s1": 0.33
+    },
+    {
+      "n": "9",
+      "name": "",
+      "s0": 0.332,
+      "s1": 0.37
     },
     {
       "n": "10",
       "name": "",
-      "s0": 0.387,
-      "s1": 0.403
+      "s0": 0.392,
+      "s1": 0.399
     },
     {
       "n": "11",
-      "name": "Hairpin",
-      "s0": 0.456,
-      "s1": 0.485
+      "name": "",
+      "s0": 0.46,
+      "s1": 0.481
     },
     {
       "n": "12",
       "name": "",
-      "s0": 0.677,
-      "s1": 0.706
+      "s0": 0.681,
+      "s1": 0.702
     },
     {
       "n": "13-15",
       "name": "",
-      "s0": 0.713,
-      "s1": 0.797
+      "s0": 0.717,
+      "s1": 0.793
     },
     {
       "n": "16-18",
-      "name": "Triple",
-      "s0": 0.802,
-      "s1": 0.892
+      "name": "",
+      "s0": 0.806,
+      "s1": 0.888
     },
     {
       "n": "19",
       "name": "",
-      "s0": 0.899,
-      "s1": 0.935
+      "s0": 0.903,
+      "s1": 0.931
     },
     {
       "n": "20",
       "name": "",
-      "s0": 0.959,
-      "s1": 0.99
+      "s0": 0.963,
+      "s1": 0.986
     }
   ],
   "straights": []

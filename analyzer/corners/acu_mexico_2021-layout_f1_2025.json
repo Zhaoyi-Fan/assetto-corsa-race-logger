@@ -1,36 +1,66 @@
 {
   "track": "acu_mexico_2021/layout_f1_2025",
-  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "comment": "Re-curated 2026-08-04: per-corner split via fast_lane.ai curvature re-scan (passes r<250 m + r<600 m, merge_gap 8 m); 2025 numbering/names per claudelogs/2026-08-04_corner-names-research-review.md (user-ruled D1-D5). Complexes stay merged where the line shows one continuous bowl. 1-3/13-15/16-17 merged complexes; esses 8R+9L share one bowl (8-9).",
   "corners": [
     {
       "n": "1-3",
-      "name": "",
-      "s0": 0.275,
-      "s1": 0.341
+      "name": "Ese Moisés Solana",
+      "s0": 0.279,
+      "s1": 0.337
     },
     {
       "n": "4-5",
       "name": "",
-      "s0": 0.468,
-      "s1": 0.516
+      "s0": 0.472,
+      "s1": 0.512
     },
     {
       "n": "6",
+      "name": "Recorte Rebaque",
+      "s0": 0.523,
+      "s1": 0.549
+    },
+    {
+      "n": "7",
       "name": "",
-      "s0": 0.519,
-      "s1": 0.553
+      "s0": 0.6,
+      "s1": 0.622
     },
     {
-      "n": "7-11",
-      "name": "Esses",
-      "s0": 0.596,
-      "s1": 0.735
+      "n": "8-9",
+      "name": "",
+      "s0": 0.628,
+      "s1": 0.673
     },
     {
-      "n": "12-17",
-      "name": "Stadium / Peraltada",
-      "s0": 0.836,
-      "s1": 0.981
+      "n": "10",
+      "name": "",
+      "s0": 0.681,
+      "s1": 0.711
+    },
+    {
+      "n": "11",
+      "name": "",
+      "s0": 0.713,
+      "s1": 0.731
+    },
+    {
+      "n": "12",
+      "name": "Curva Adrián Fernández",
+      "s0": 0.84,
+      "s1": 0.874
+    },
+    {
+      "n": "13-15",
+      "name": "Foro Sol",
+      "s0": 0.879,
+      "s1": 0.919
+    },
+    {
+      "n": "16-17",
+      "name": "Peraltada (Nigel Mansell)",
+      "s0": 0.926,
+      "s1": 0.977
     }
   ],
   "straights": []

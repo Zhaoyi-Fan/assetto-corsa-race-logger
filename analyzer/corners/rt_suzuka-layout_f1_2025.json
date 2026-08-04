@@ -1,66 +1,90 @@
 {
   "track": "rt_suzuka/layout_f1_2025",
-  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "comment": "Re-curated 2026-08-04: per-corner split via fast_lane.ai curvature re-scan (passes r<250 m + r<600 m, merge_gap 8 m); 2025 numbering/names per claudelogs/2026-08-04_corner-names-research-review.md (user-ruled D1-D5). Complexes stay merged where the line shows one continuous bowl. S Curves split 3-6 individually; 1-2 and 13-14 and 16-18 stay merged (single bowls); T12 = 200R.",
   "corners": [
     {
       "n": "1-2",
       "name": "First Curve",
-      "s0": 0.11,
-      "s1": 0.172
+      "s0": 0.114,
+      "s1": 0.168
     },
     {
-      "n": "3-7",
-      "name": "S Curves / Dunlop",
-      "s0": 0.181,
-      "s1": 0.359
+      "n": "3",
+      "name": "S Curves",
+      "s0": 0.185,
+      "s1": 0.199
+    },
+    {
+      "n": "4",
+      "name": "S Curves",
+      "s0": 0.204,
+      "s1": 0.224
+    },
+    {
+      "n": "5",
+      "name": "S Curves",
+      "s0": 0.226,
+      "s1": 0.25
+    },
+    {
+      "n": "6",
+      "name": "S Curves",
+      "s0": 0.256,
+      "s1": 0.289
+    },
+    {
+      "n": "7",
+      "name": "Dunlop Curve",
+      "s0": 0.291,
+      "s1": 0.355
     },
     {
       "n": "8",
       "name": "Degner 1",
-      "s0": 0.382,
-      "s1": 0.41
+      "s0": 0.386,
+      "s1": 0.406
     },
     {
       "n": "9",
       "name": "Degner 2",
-      "s0": 0.413,
-      "s1": 0.438
+      "s0": 0.417,
+      "s1": 0.434
     },
     {
       "n": "10",
       "name": "",
-      "s0": 0.468,
-      "s1": 0.491
+      "s0": 0.473,
+      "s1": 0.487
     },
     {
       "n": "11",
       "name": "Hairpin",
-      "s0": 0.491,
-      "s1": 0.521
+      "s0": 0.495,
+      "s1": 0.517
     },
     {
       "n": "12",
-      "name": "",
-      "s0": 0.53,
-      "s1": 0.583
+      "name": "200R",
+      "s0": 0.539,
+      "s1": 0.573
     },
     {
       "n": "13-14",
       "name": "Spoon",
-      "s0": 0.644,
-      "s1": 0.712
+      "s0": 0.648,
+      "s1": 0.708
     },
     {
       "n": "15",
       "name": "130R",
-      "s0": 0.848,
-      "s1": 0.866
+      "s0": 0.852,
+      "s1": 0.862
     },
     {
       "n": "16-18",
-      "name": "Casio Triangle",
-      "s0": 0.92,
-      "s1": 0.98
+      "name": "Casio Triangle / Last Curve",
+      "s0": 0.924,
+      "s1": 0.976
     }
   ],
   "straights": []

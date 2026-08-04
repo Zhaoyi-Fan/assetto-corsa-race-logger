@@ -1,78 +1,84 @@
 {
   "track": "baku_2022/layout_f1_2025",
-  "comment": "Curated 2026-07-09: spline ranges from this track's own fast_lane.ai geometric curvature scan, corner numbers/names aligned in travel order with the official F1 numbering. Mid-sector groupings on some street tracks are approximate - verify anchors against the first race report and edit n/name freely.",
+  "comment": "Re-curated 2026-08-04: per-corner split via fast_lane.ai curvature re-scan (passes r<250 m + r<600 m, merge_gap 8 m); 2025 numbering/names per claudelogs/2026-08-04_corner-names-research-review.md (user-ruled D1-D5). Complexes stay merged where the line shows one continuous bowl. Numbered-only circuit; Old City (8-12) famous nickname kept; T14 from weak pass; 18-20 unsplittable sweep.",
   "corners": [
     {
       "n": "1",
       "name": "",
-      "s0": 0.025,
-      "s1": 0.049
+      "s0": 0.029,
+      "s1": 0.045
     },
     {
       "n": "2",
       "name": "",
-      "s0": 0.084,
-      "s1": 0.105
+      "s0": 0.088,
+      "s1": 0.101
     },
     {
       "n": "3",
       "name": "",
-      "s0": 0.229,
-      "s1": 0.252
+      "s0": 0.233,
+      "s1": 0.248
     },
     {
       "n": "4",
       "name": "",
-      "s0": 0.267,
-      "s1": 0.289
+      "s0": 0.271,
+      "s1": 0.285
     },
     {
       "n": "5-6",
       "name": "",
-      "s0": 0.322,
-      "s1": 0.353
+      "s0": 0.326,
+      "s1": 0.349
     },
     {
       "n": "7",
       "name": "",
-      "s0": 0.4,
-      "s1": 0.422
+      "s0": 0.404,
+      "s1": 0.418
     },
     {
       "n": "8-12",
-      "name": "Castle 段",
-      "s0": 0.434,
-      "s1": 0.48
+      "name": "Old City",
+      "s0": 0.438,
+      "s1": 0.476
     },
     {
       "n": "13",
       "name": "",
-      "s0": 0.522,
-      "s1": 0.547
+      "s0": 0.526,
+      "s1": 0.543
     },
     {
-      "n": "14-15",
+      "n": "14",
       "name": "",
-      "s0": 0.602,
-      "s1": 0.62
+      "s0": 0.559,
+      "s1": 0.577
+    },
+    {
+      "n": "15",
+      "name": "",
+      "s0": 0.606,
+      "s1": 0.616
     },
     {
       "n": "16",
       "name": "",
-      "s0": 0.657,
-      "s1": 0.683
+      "s0": 0.661,
+      "s1": 0.679
     },
     {
       "n": "17",
       "name": "",
-      "s0": 0.699,
-      "s1": 0.714
+      "s0": 0.703,
+      "s1": 0.71
     },
     {
       "n": "18-20",
       "name": "",
-      "s0": 0.734,
-      "s1": 0.781
+      "s0": 0.738,
+      "s1": 0.777
     }
   ],
   "straights": []

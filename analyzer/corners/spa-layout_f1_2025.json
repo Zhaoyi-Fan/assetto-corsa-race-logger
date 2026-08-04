@@ -1,19 +1,19 @@
 {
   "track": "spa/layout_f1_2025",
-  "comment": "Corner numbering per the user's F1 2025 map (2026-07-09). Spline ranges calibrated against fast_lane.ai radius segments + verified anchors: L1 melee 0.052-0.055 (La Source exit), HINT_3 zone 0.658-0.678 (Fagnes), sand trap 0.665-0.672, player off 0.733 (Paul Frere), bottoming 0.10-0.15 (Eau Rouge compression), chicane 0.960-0.982.",
+  "comment": "Corner numbering per the user's F1 2025 map (2026-07-09). Spline ranges calibrated against fast_lane.ai radius segments + verified anchors: L1 melee 0.052-0.055 (La Source exit), HINT_3 zone 0.658-0.678 (Fagnes), sand trap 0.665-0.672, player off 0.733 (Paul Frere), bottoming 0.10-0.15 (Eau Rouge compression), chicane 0.960-0.982. Names enriched 2026-08-04 per the corner-name review (D1-D5): 9 Speaker's Corner (Jacky Ickx dedication 2018), 10-11 Pouhon, 18-19 Bus Stop; ranges untouched (race-verified).",
   "corners": [
     { "n": "1",     "name": "La Source",            "s0": 0.043, "s1": 0.070, "dir": "R" },
     { "n": "2-4",   "name": "Eau Rouge / Raidillon", "s0": 0.080, "s1": 0.175, "dir": "LRL" },
     { "n": "5-6",   "name": "Les Combes",           "s0": 0.334, "s1": 0.368, "dir": "RL" },
     { "n": "7",     "name": "Malmedy",              "s0": 0.368, "s1": 0.393, "dir": "R" },
     { "n": "8",     "name": "Bruxelles",            "s0": 0.418, "s1": 0.455, "dir": "R" },
-    { "n": "9",     "name": "T9",                   "s0": 0.455, "s1": 0.484, "dir": "L" },
-    { "n": "10-11", "name": "Double Gauche",        "s0": 0.533, "s1": 0.593, "dir": "L" },
+    { "n": "9",     "name": "Speaker's Corner","s0": 0.455, "s1": 0.484, "dir": "L" },
+    { "n": "10-11", "name": "Pouhon","s0": 0.533, "s1": 0.593, "dir": "L" },
     { "n": "12-13", "name": "Les Fagnes",           "s0": 0.630, "s1": 0.685, "dir": "RL" },
     { "n": "14",    "name": "Campus",               "s0": 0.696, "s1": 0.720, "dir": "R" },
     { "n": "15",    "name": "Paul Frere",           "s0": 0.725, "s1": 0.757, "dir": "R" },
     { "n": "16-17", "name": "Blanchimont",          "s0": 0.852, "s1": 0.897, "dir": "L" },
-    { "n": "18-19", "name": "Chicane",              "s0": 0.955, "s1": 0.985, "dir": "LR" }
+    { "n": "18-19", "name": "Bus Stop",             "s0": 0.955, "s1": 0.985, "dir": "LR" }
   ],
   "straights": [
     { "name": "Kemmel",   "s0": 0.175, "s1": 0.334 },
