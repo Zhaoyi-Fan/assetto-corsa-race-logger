@@ -34,16 +34,16 @@ track content.
 ## Live example
 
 **[▶ Open a real race report](https://zhaoyi-fan.github.io/assetto-corsa-race-logger/examples/spa-race.report.html)** —
-a 16-car league race at Spa (Formula Alpha 2025): a chaotic opening lap, 13 incident cards,
-8 DNFs, and a corner the AI kept crashing at. Everything in it — replay, lap charts, attribution —
-is one self-contained HTML file exactly as the tool generates it.
+a 15-car, 5-lap league race at Spa (Formula Alpha 2025): standing-start reaction times for the
+whole field, 8 car-to-car contacts, 7 incident cards and 3 DNFs. Everything in it — replay, lap
+charts, attribution — is one self-contained HTML file exactly as the tool generates it.
 
 The raw log it was built from ships in [`examples/vrclog_spa_race_example.zip`](examples/vrclog_spa_race_example.zip)
-(26 MB unzipped). Reproduce the report yourself:
+(19 MB unzipped). Reproduce the report yourself:
 
 ```
 unzip examples/vrclog_spa_race_example.zip -d examples
-python analyzer/vrclog_report.py examples/vrclog_20260709_000356_spa-layout_f1_2025_race_r2.txt
+python analyzer/vrclog_report.py examples/vrclog_20260803_231630_spa-layout_f1_2025_race_r13.txt
 ```
 
 (Regeneration reads the track's AI line from your AC install, so it needs the spa
