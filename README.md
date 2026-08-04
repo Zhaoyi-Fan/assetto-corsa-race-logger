@@ -72,7 +72,12 @@ python analyzer/vrclog_report.py examples/vrclog_20260803_231630_spa-layout_f1_2
   point, entry/apex speed, back-to-throttle point, corner time, brake-point consistency σ),
   driving-style metrics (coasting, full-throttle, trail-braking, time over the grip peak),
   a G-G diagram and a micro-sector heatmap across all laps. Click any chart to jump into the
-  replay at that exact moment.
+  replay at that exact moment. **Click any corner row** for the whole-race style panel (v1.4):
+  you vs the field median over every clean pass — brake onset/peak/release, throttle commit
+  points and interruptions, rear wheelspin and slide time, kerb usage, per-driver breakdown,
+  median speed/pedal/slip profiles, and the track's active `ai_hints` shaded on the chart.
+  The same engine ships as a CLI (`analyzer/corner_style.py`): run it on two logs to measure
+  an AI-hint change corner by corner in metres.
 * **Timeline** — one swimlane per driver: incident dots (click → jump into replay), pit-stop
   blocks, DNF markers, caution bands, and a grip/rain strip along the bottom.
 * **Incidents** — one card per episode: severity score, per-car narrative chain

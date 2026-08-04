@@ -27,6 +27,7 @@ import vrclog_parser
 import track_model
 import detectors
 import attribution
+import corner_style
 import report_html
 import thresholds as th
 
@@ -306,10 +307,43 @@ def main():
         check("stuck-recovery DNF narrative", "auto-recovered" in texts, texts)
         check("bilingual title", bool(e["title"]) and bool(e["titleEn"]))
 
+    print("corner_style")
+    cs = corner_style.analyze_corners(rd, tm)
+    check("two corner records", len(cs["corners"]) == 2, str(len(cs["corners"])))
+    check("ref = the human player", cs["ref"] == 0 and cs["ref_name"] == "TestPlayer")
+    all_passes = [p for r in cs["corners"] for p in r["passes"]]
+    check("corner passes found", len(all_passes) >= 8, str(len(all_passes)))
+    check("absent car -> no passes", all(p["car"] != 3 for p in all_passes))
+    check("no-brake log -> brake stats absent, no crash",
+          all("brake_m" not in r["groups"]["others"] for r in cs["corners"]))
+    oth = cs["corners"][0]["groups"]["others"]
+    check("cruise v_min ~ 180", bool(oth.get("v_min"))
+          and abs(oth["v_min"]["med"] - 180.0) < 3.0,
+          str(oth.get("v_min")))
+    check("glitch/crash passes flagged dirty",
+          any(not p["clean"] for p in all_passes),
+          "all passes clean?!")
+    n1 = sum(1 for p in all_passes if p["car"] == 1)
+    n2 = sum(1 for p in all_passes if p["car"] == 2)
+    check("DNF car has fewer passes than survivor", n1 < n2, f"car1={n1} car2={n2}")
+    prof = cs["corners"][0]["profiles"]["others"]
+    check("profiles: 4 channels, one length, >30 pts",
+          prof is not None
+          and len({len(prof[k]) for k in ("speed", "gas", "brake", "nd_rear")}) == 1
+          and len(prof["speed"]) > 30,
+          str(prof and {k: len(v) for k, v in prof.items() if isinstance(v, list)}))
+
     print("report")
     payload, rep_bin = report_html.build_payload(rd, an, tm)
     check("weather in payload", len(payload["weather"]["t"]) >= 18)
     check("results has 4 cars", len(payload["results"]) == 4)
+    check("corner style block in payload",
+          payload["cornerStyle"] is not None
+          and len(payload["cornerStyle"]["corners"]) == 2
+          and payload["cornerStyle"]["refName"] == "TestPlayer"
+          and payload["cornerStyle"]["corners"][0]["prof"]["field"] is not None
+          and payload["cornerStyle"]["corners"][0]["field"] is not None,
+          str(payload["cornerStyle"] and list(payload["cornerStyle"].keys())))
     check("start in payload", payload["start"] is not None
           and payload["start"]["rolling"] is False
           and payload["start"]["green"] == 2.0, str(payload["start"]))

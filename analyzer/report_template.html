@@ -91,6 +91,16 @@ select{background:var(--bg3); color:var(--fg); border:1px solid var(--line); bor
 .hint{color:var(--dim); font-size:.76rem; margin-top:6px}
 .hotrow{display:flex; align-items:center; gap:9px; font-size:.84rem; margin:4px 0}
 .hotbar{height:10px; background:var(--bad); border-radius:3px}
+/* whole-race corner style panel (v1.4) */
+tr.csrow{cursor:pointer}
+tr.csrow:hover td{background:var(--bg3)}
+tr.csx>td{background:var(--bg2); border:1px solid var(--line); padding:12px 14px}
+.csrange{color:var(--dim); font-size:.72rem; margin-left:2px}
+.cstbl{font-size:.8rem; width:100%}
+.cstbl td,.cstbl th{padding:3px 8px}
+.cstbl tr.cssel td{color:var(--fg); font-weight:600}
+.csdot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px}
+#cschart{width:100%; margin-top:4px}
 @media (max-width:900px){ .grid2{grid-template-columns:1fr} #replaywrap{grid-template-columns:1fr} }
 </style>
 </head>
@@ -144,7 +154,7 @@ select{background:var(--bg3); color:var(--fg); border:1px solid var(--line); bor
       <canvas id="drvinp" height="110"></canvas>
       <canvas id="drvdelta" height="110"></canvas>
     </div>
-    <h2 data-i18n="drvCornersH"></h2>
+    <h2><span data-i18n="drvCornersH"></span> <span class="hint" data-i18n="csHint"></span></h2>
     <table id="drvcorners"></table>
     <div class="grid2" style="margin-top:16px">
       <div>
@@ -220,6 +230,18 @@ const I18N = {
     drvStyleH:"驾驶风格（每圈占比）", styleCoast:"滑行(无油无刹)", styleWot:"全油门",
     styleTrail:"刹车中带转向", styleSlip:"滑移超限(nd>1.1)", styleApps:"刹车次数/圈",
     styleSel:"选中圈", styleRef:"参考圈",
+    csHint:"点击行 → 整场风格对比（全部圈次汇总）",
+    csDriver:"车手", csField:"全场中位", csDelta:"Δ 车手−全场", csPasses:"干净通过",
+    csNoDrv:"{sel} 本弯无干净通过 — 显示 {ref}", csNone:"本弯没有风格数据（无干净通过）",
+    csBrakePt:"刹车点（弯前 m）", csBrakeSpeed:"刹车时速（km/h）", csBrakePeak:"刹车峰值（0–1）",
+    csRelease:"松刹点（入弯后 m）", csEntry:"入弯速度（km/h）", csVmin:"最低速（km/h）",
+    csVminAt:"最低速位置（入弯后 m）", csExit:"出弯速度（km/h）",
+    csGas50:"油门≥50%（距弯尾 m）", csGas90:"油门≥90%（距弯尾 m）", csCuts:"油门中断（次，中位）",
+    csSpin:"大油门后轮打滑（s）", csPartSpin:"部分油门打滑（s）", csSlide:"侧滑>8°（s）",
+    csKerb:"路肩时间（s）", csOff:"出赛道时间（s）", csTime:"弯段用时（s）",
+    csHints:"生效 ai_hints", csTblN:"n", csTblBrake:"刹车点", csTblVmin:"最低速",
+    csTblGas:"油门50%", csTblSpin:"打滑 s", csTblTime:"用时 s",
+    csLegend:"实线={ref} 中位 · 虚线=全场中位 · 速度走左轴 · 油门/刹车/后轮滑移 nd 走右轴（nd 点线 = 1.0 抓地峰值）· 竖线=弯口/弯尾 · 橙色带=ai_hints 区间",
     drvGgH:"G-G 图", drvGgHint:"横向 vs 纵向 G — 云越贴外圈说明复合抓地力用得越满",
     drvHeatH:"微分段热图", drvHeatHint:"每行一圈,每列 5% 赛段,颜色 = 与该车手该段最佳的差值(点击跳回放)",
     heatPit:"进站圈",
@@ -262,6 +284,18 @@ const I18N = {
     drvStyleH:"Driving style (share of lap)", styleCoast:"Coasting (no pedal)", styleWot:"Full throttle",
     styleTrail:"Braking while steering", styleSlip:"Over grip peak (nd>1.1)", styleApps:"Brake applications/lap",
     styleSel:"Selected", styleRef:"Reference",
+    csHint:"click a row → whole-race style comparison (all laps pooled)",
+    csDriver:"Driver", csField:"Field median", csDelta:"Δ driver−field", csPasses:"clean passes",
+    csNoDrv:"{sel} has no clean pass here — showing {ref}", csNone:"no style data for this corner (no clean passes)",
+    csBrakePt:"Brake point (m before entry)", csBrakeSpeed:"Speed at brake (km/h)", csBrakePeak:"Brake peak (0–1)",
+    csRelease:"Brake release (m past entry)", csEntry:"Entry speed (km/h)", csVmin:"Min speed (km/h)",
+    csVminAt:"Min-speed point (m past entry)", csExit:"Exit speed (km/h)",
+    csGas50:"Gas ≥50% (m past corner end)", csGas90:"Gas ≥90% (m past corner end)", csCuts:"Throttle interruptions (med)",
+    csSpin:"Power-on rear slip (s)", csPartSpin:"Part-throttle rear slip (s)", csSlide:"Slide >8° (s)",
+    csKerb:"Kerb time (s)", csOff:"Off-track time (s)", csTime:"Corner time (s)",
+    csHints:"active ai_hints", csTblN:"n", csTblBrake:"Brake pt", csTblVmin:"Min spd",
+    csTblGas:"Gas 50%", csTblSpin:"Spin s", csTblTime:"Time s",
+    csLegend:"solid = {ref} median · dashed = field median · speed on the left axis · gas/brake/rear slip nd on the right axis (dotted nd line = 1.0 grip peak) · verticals = corner entry/end · orange bands = ai_hints",
     drvGgH:"G-G diagram", drvGgHint:"lateral vs longitudinal G — a fuller ring means more combined grip used",
     drvHeatH:"Micro-sector heatmap", drvHeatHint:"one row per lap, 5% track segments, color = delta to this driver's best (click to replay)",
     heatPit:"pit lap",
@@ -973,16 +1007,19 @@ function fmtD(v, ref, unit, invert){
 }
 function buildCornerTable(A, B){
   const tb = document.getElementById("drvcorners");
+  csOpen = -1;
   if (!A){ tb.innerHTML = ""; return; }
   const sameLap = B && A.ci === B.ci && A.n === B.n;
   const stab = brakeStability(A.ci);
+  const cs = DATA.cornerStyle;
   tb.innerHTML = `<tr><th>${T("colCorner")}</th><th>${T("colBrakePt")}</th><th>${T("colEntry")}</th>
     <th>${T("colApex")}</th><th>${T("colThrottle")}</th><th>${T("colTime")}</th><th>${T("colStab")}</th></tr>` +
     CORNERS.map((l, i) => {
       const a = cornerMetrics(A, l, prevExit(i));
       const b = B && !sameLap ? cornerMetrics(B, l, prevExit(i)) : null;
       if (!a) return "";
-      return `<tr><td>T${l.n} ${esc(l.name || "")}</td>
+      const click = cs && cs.corners[i] ? ` class="csrow" data-k="${i}"` : "";
+      return `<tr${click}><td>T${l.n} ${esc(l.name || "")}</td>
         <td>${fmtD(a.brakePt, b?.brakePt, " m")}</td>
         <td>${fmtD(a.entry, b?.entry, "")}</td>
         <td>${fmtD(a.apex, b?.apex, "")}</td>
@@ -990,6 +1027,126 @@ function buildCornerTable(A, B){
         <td>${fmtD(a.time, b?.time, "s", true)}</td>
         <td>${stab[i] === null ? "—" : "±" + stab[i].toFixed(0) + " m"}</td></tr>`;
     }).join("");
+  tb.querySelectorAll("tr.csrow").forEach(tr =>
+    tr.addEventListener("click", () => toggleCsPanel(+tr.dataset.k, tr)));
+}
+
+// -- whole-race corner style panel (payload.cornerStyle, report v1.4) -----------------
+let csOpen = -1;
+function toggleCsPanel(k, tr){
+  document.querySelectorAll("tr.csx").forEach(r => r.remove());
+  if (csOpen === k){ csOpen = -1; return; }
+  csOpen = k;
+  tr.insertAdjacentHTML("afterend",
+    `<tr class="csx"><td colspan="7"><div id="cspanel"></div></td></tr>`);
+  renderCsPanel(k);
+}
+const csName = () => nameOf(DRV.car);
+function csFmt(v, dg){
+  return v ? `${v[0].toFixed(dg)} <span class="csrange">${v[1].toFixed(dg)}..${v[2].toFixed(dg)}</span>` : "—";
+}
+function renderCsPanel(k){
+  const cs = DATA.cornerStyle, C = cs.corners[k], el = document.getElementById("cspanel");
+  if (!C || (!C.ref && !C.field)){ el.innerHTML = `<span class="hint">${T("csNone")}</span>`; return; }
+  let colName = csName(), col = C.drivers[colName], note = "";
+  if (!col && C.ref){
+    if (colName !== cs.refName) note = T("csNoDrv", {sel: esc(colName), ref: esc(cs.refName)});
+    colName = cs.refName; col = C.ref;
+  }
+  const fld = C.field;
+  const hints = C.hints.length
+    ? `<div class="hint">${T("csHints")}: ${C.hints.map(h => `[${esc(h.sec)}] ${esc(h.txt)}`).join(" · ")}</div>` : "";
+  const ROWS = [["csBrakePt","brake_m",0],["csBrakeSpeed","v_brake",0],["csBrakePeak","brake_peak",2],
+    ["csRelease","release_m",0],["csEntry","v_entry",0],["csVmin","v_min",0],["csVminAt","v_min_m",0],
+    ["csExit","v_exit",0],["csGas50","gas50_m",0],["csGas90","full_m",0],["csSpin","spin_s",2],
+    ["csPartSpin","part_spin_s",2],["csSlide","slide_s",2],["csKerb","kerb_s",2],["csOff","off_s",2],
+    ["csTime","time_s",2,true]];
+  let mt = `<table class="cstbl"><tr><th></th><th>${esc(colName)}</th><th>${T("csField")}</th><th>${T("csDelta")}</th></tr>`;
+  for (const [key, f, dg, inv] of ROWS){
+    const a = col && col[f], b = fld && fld[f];
+    let d = "—";
+    if (a && b){
+      const dv = a[0] - b[0];
+      d = `${dv >= 0 ? "+" : ""}${dv.toFixed(dg)}`;
+      if (inv && Math.abs(dv) >= 0.02) d = `<span class="${dv < 0 ? "dpos" : "dneg"}">${d}</span>`;
+    }
+    mt += `<tr><td>${T(key)}</td><td>${csFmt(a, dg)}</td><td>${csFmt(b, dg)}</td><td>${d}</td></tr>`;
+  }
+  mt += `<tr><td>${T("csCuts")}</td><td>${col ? col.cuts : "—"}</td><td>${fld ? fld.cuts : "—"}</td><td></td></tr>`;
+  mt += `<tr><td>${T("csPasses")}</td><td>${col ? col.c + "/" + col.n : "—"}</td><td>${fld ? fld.c + "/" + fld.n : "—"}</td><td></td></tr></table>`;
+  const colorOf = {}; DATA.cars.forEach(c => colorOf[c.driver] = c.color);
+  const drvs = Object.entries(C.drivers).sort((p, q) =>
+    ((p[1].time_s || [9e9])[0]) - ((q[1].time_s || [9e9])[0]));
+  let dt = `<table class="cstbl"><tr><th>${T("csDriver")}</th><th>${T("csTblN")}</th><th>${T("csTblBrake")}</th>
+    <th>${T("csTblVmin")}</th><th>${T("csTblGas")}</th><th>${T("csTblSpin")}</th><th>${T("csTblTime")}</th></tr>`;
+  for (const [name, s] of drvs){
+    const dot = `<span class="csdot" style="background:${colorOf[name] || "#666"}"></span>`;
+    dt += `<tr${name === colName ? ' class="cssel"' : ""}><td>${dot}${esc(name)}</td><td>${s.c}</td>
+      <td>${s.brake_m ? s.brake_m[0].toFixed(0) + " m" : "—"}</td>
+      <td>${s.v_min ? s.v_min[0].toFixed(0) : "—"}</td>
+      <td>${s.gas50_m ? s.gas50_m[0].toFixed(0) + " m" : "—"}</td>
+      <td>${s.spin_s ? s.spin_s[0].toFixed(2) : "—"}</td>
+      <td>${s.time_s ? s.time_s[0].toFixed(2) : "—"}</td></tr>`;
+  }
+  dt += `</table>`;
+  el.innerHTML = `${note ? `<div class="hint">${note}</div>` : ""}
+    <canvas id="cschart" height="230"></canvas>
+    <div class="hint">${T("csLegend", {ref: esc(cs.refName)})}</div>${hints}
+    <div class="grid2" style="margin-top:10px"><div>${mt}</div><div>${dt}</div></div>`;
+  drawCsChart(C, cs);
+}
+function drawCsChart(C, cs){
+  const s = drvSize("cschart", 230);
+  if (!s) return;
+  const [c, w, h] = s;
+  const P = C.prof, ref = P.ref, fld = P.field;
+  const src = ref || fld;
+  if (!src) return;
+  const n = src.speed.length, G = P.gridM, X = m => 8 + (m / ((n - 1) * G)) * (w - 16);
+  const vmax = Math.max(...(ref ? ref.speed : []), ...(fld ? fld.speed : []), 50) * 1.06;
+  const yV = v => 14 + (1 - v / vmax) * (h - 32);          // left axis: speed
+  const RMAX = 2.5;
+  const yR = v => 14 + (1 - Math.min(v, RMAX) / RMAX) * (h - 32);  // right axis: 0..2.5
+  c.strokeStyle = "#232a38"; c.fillStyle = "#6b7482"; c.font = "9px sans-serif";
+  for (let v = 0; v <= vmax; v += 100){
+    c.beginPath(); c.moveTo(8, yV(v)); c.lineTo(w - 8, yV(v)); c.stroke();
+    c.fillText(v.toFixed(0), 10, yV(v) - 2);
+  }
+  for (const h2 of C.hints){                                // ai_hints bands first
+    c.fillStyle = "rgba(232,163,61,.10)";
+    c.fillRect(X(h2.m0), 14, Math.max(2, X(h2.m1) - X(h2.m0)), h - 32);
+    c.fillStyle = "#e8a33d88"; c.fillText(h2.sec, X(h2.m0) + 2, 22);
+  }
+  for (const [m, lab] of [[P.dEntry, "in"], [P.dExit, "out"]]){
+    c.strokeStyle = "#4a5568"; c.setLineDash([3, 3]);
+    c.beginPath(); c.moveTo(X(m), 14); c.lineTo(X(m), h - 18); c.stroke(); c.setLineDash([]);
+    c.fillStyle = "#6b7482"; c.fillText(lab, X(m) + 2, h - 20);
+  }
+  c.strokeStyle = "#e8a33d55"; c.setLineDash([2, 4]);       // nd = 1.0 grip peak
+  c.beginPath(); c.moveTo(8, yR(1)); c.lineTo(w - 8, yR(1)); c.stroke(); c.setLineDash([]);
+  const line = (arr, y, col, dash) => {
+    if (!arr) return;
+    c.strokeStyle = col; c.lineWidth = 1.4; c.setLineDash(dash ? [5, 4] : []);
+    c.beginPath();
+    for (let i = 0; i < arr.length; i++){
+      const x = X(i * G), yy = y(arr[i]);
+      i ? c.lineTo(x, yy) : c.moveTo(x, yy);
+    }
+    c.stroke(); c.setLineDash([]); c.lineWidth = 1;
+  };
+  const refColor = (DATA.cars.find(cc => cc.driver === cs.refName) || {}).color || "#e6e9ef";
+  if (fld){
+    line(fld.speed, yV, "#8b93a2", true);
+    line(fld.brake, yR, "#e0555588", true);
+    line(fld.gas, yR, "#2fbf7188", true);
+    line(fld.nd_rear, yR, "#e8a33d88", true);
+  }
+  if (ref){
+    line(ref.speed, yV, refColor, false);
+    line(ref.brake, yR, "#e05555", false);
+    line(ref.gas, yR, "#2fbf71", false);
+    line(ref.nd_rear, yR, "#e8a33d", false);
+  }
 }
 
 // -- style metrics / G-G / heatmap ----------------------------------------------------

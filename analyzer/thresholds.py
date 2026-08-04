@@ -59,3 +59,16 @@ AI_LINE_MIN_EPISODES = 3    # distinct AI episodes at one corner -> line-suspect
 
 # ---- report ----------------------------------------------------------------------------------
 CARD_MIN_SEVERITY  = 25.0   # episodes below this appear in the table but not as cards
+
+# ---- corner_style (per-corner style comparison) ----------------------------------------------
+# Calibrated on: spa chicane analysis 2026-08-04 (r13 08-03 + r2 07-09 cross-checked).
+CS_BRAKE_ON        = 0.15   # first sustained press above this = brake onset...
+CS_BRAKE_HOLD      = 0.10   # ...held above this on the next 15 Hz sample (kills taps)
+CS_ND_SPIN         = 1.50   # rear ndSlip beyond this while committed = power-on wheelspin
+CS_GAS_COMMIT      = 0.70   # gas above this = committed (AI part-throttle slides sit below)
+CS_ND_PART         = 1.20   # rear ndSlip beyond this at part throttle = tentative-slip time
+CS_SLIDE_DEG       = 8.0    # |beta| beyond this = visible slide (below detectors' 16 deg
+                            #  episode threshold on purpose: style, not incident)
+CS_TRAFFIC_APPR    = 0.60   # approach speed under this fraction of the field median = traffic
+CS_TRAFFIC_VMIN    = 0.50   # min corner speed under this fraction of field median = traffic
+CS_PROFILE_GRID_M  = 3.0    # median-profile resolution (m); chicane window ~800 m -> ~270 pts

@@ -27,11 +27,12 @@ import struct
 import zlib
 import numpy as np
 
+import corner_style
 import thresholds as th
 
 STRIDE = 32
 REPLAY_HZ = 15.0
-REPORT_VERSION = "1.3"
+REPORT_VERSION = "1.4"
 
 
 def _thresholds_fingerprint():
@@ -222,6 +223,16 @@ def build_payload(rd, an, tm):
              "tyreFrom": compound_at(p["car"], p["t0"] - 5.0),
              "tyreTo": compound_at(p["car"], p["t1"] + 8.0)} for p in an.pit_stops]
 
+    # whole-race per-corner style stats (v1.4). Optional by design: a failure here
+    # (no corners, odd track, future edge case) must never cost the user the report.
+    try:
+        cs_res = corner_style.analyze_corners(rd, tm)
+        cs_block = corner_style.payload_block(
+            cs_res, corner_style.hints_for(rd.meta), tm.total)
+    except Exception as e:
+        print(f"      note: corner style stats skipped ({type(e).__name__}: {e})")
+        cs_block = None
+
     payload = {
         "meta": {
             "trackName": rd.meta.get("trackName", ""), "trackFull": rd.meta.get("trackFull", ""),
@@ -255,6 +266,7 @@ def build_payload(rd, an, tm):
         "track": {"center": _round2(center), "left": _round2(left), "right": _round2(right),
                   "labels": labels,
                   "sf": [round(float(tm.pts[sf, 0]), 1), round(float(tm.pts[sf, 2]), 1)]},
+        "cornerStyle": cs_block,
         "replay": rep_meta,
     }
     return payload, rep_bin
