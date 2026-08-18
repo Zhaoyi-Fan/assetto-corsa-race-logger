@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VRC 赛季报告</title>
+<style>
+:root{--bg:#101318;--bg2:#171b22;--bg3:#1f242e;--line:#2a3140;--fg:#e8ebf0;
+  --dim:#9aa3b2;--acc:#3b7ddd;--bad:#e8433f;font-size:15px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font-family:"Segoe UI",system-ui,sans-serif}
+header{padding:14px 22px;border-bottom:1px solid var(--line);background:var(--bg2);position:relative}
+h1{font-size:1.25rem;font-weight:600} h2{font-size:1.02rem;margin:20px 0 8px}
+#langbtn{position:absolute;top:14px;right:22px;background:var(--bg3);color:var(--fg);
+  border:1px solid var(--line);border-radius:6px;padding:5px 12px;cursor:pointer}
+main{padding:10px 22px 30px;max-width:1100px}
+table{border-collapse:collapse;width:100%;font-size:.87rem}
+th,td{padding:5px 10px;text-align:left;border-bottom:1px solid var(--line)}
+th{color:var(--dim);font-weight:500;font-size:.78rem}
+a{color:var(--acc);text-decoration:none} a:hover{text-decoration:underline}
+.hint{color:var(--dim);font-size:.78rem}
+.bar{display:inline-block;height:9px;background:var(--bad);border-radius:3px;
+  vertical-align:1px;margin-right:7px}
+.num{font-variant-numeric:tabular-nums}
+</style></head><body>
+<header><h1 id="title"></h1>
+<button id="langbtn">EN</button>
+<div class="hint" id="sub"></div></header>
+<main>
+<h2 id="h-races"></h2><table id="races"></table>
+<h2 id="h-drivers"></h2><div class="hint" id="drivers-hint"></div><table id="drivers"></table>
+<h2 id="h-hot"></h2><table id="hot"></table>
+</main>
+<script>
+"use strict";
+const DATA = {"generated":"2026-08-18 04:29","races":[{"file":"vrclog_20260713_233246_montreal-montreal_f1_2025_race_r29.txt","date":"2026-07-13 23:32:46","track":"Montreal F1 2025","trackFull":"montreal/montreal_f1_2025","session":"race","cars":20,"laps":12,"minutes":17.1,"cards":15,"dnfs":5,"report":"vrclog_20260713_233246_montreal-montreal_f1_2025_race_r29.report.html"},{"file":"vrclog_20260715_182326_monaco_2020-monaco_f1_2025_race_r24.txt","date":"2026-07-15 18:23:26","track":"Monaco F1 2025","trackFull":"monaco_2020/monaco_f1_2025","session":"race","cars":20,"laps":14,"minutes":19.8,"cards":15,"dnfs":6,"report":"vrclog_20260715_182326_monaco_2020-monaco_f1_2025_race_r24.report.html"},{"file":"vrclog_20260724_001346_spa-layout_f1_2025_race_r7.txt","date":"2026-07-24 00:13:46","track":"Spa F1 2025","trackFull":"spa/layout_f1_2025","session":"race","cars":21,"laps":10,"minutes":20.0,"cards":10,"dnfs":7,"report":"vrclog_20260724_001346_spa-layout_f1_2025_race_r7.report.html"},{"file":"vrclog_20260724_223925_fn_hungaroring-layout_f1_2025_race_r1.txt","date":"2026-07-24 22:39:25","track":"Hungaroring F1 2025","trackFull":"fn_hungaroring/layout_f1_2025","session":"race","cars":14,"laps":3,"minutes":5.6,"cards":4,"dnfs":2,"report":"vrclog_20260724_223925_fn_hungaroring-layout_f1_2025_race_r1.report.html"},{"file":"vrclog_20260806_223558_ks_silverstone-silverstone_f1_2025_race_r1.txt","date":"2026-08-06 22:35:58","track":"Silverstone F1 2025","trackFull":"ks_silverstone/silverstone_f1_2025","session":"race","cars":16,"laps":5,"minutes":8.4,"cards":10,"dnfs":5,"report":"vrclog_20260806_223558_ks_silverstone-silverstone_f1_2025_race_r1.report.html"},{"file":"vrclog_20260807_224646_vhe_interlagos-layout_f1_2025_race_r7.txt","date":"2026-08-07 22:46:46","track":"Interlagos 2025","trackFull":"vhe_interlagos/layout_f1_2025","session":"race","cars":19,"laps":5,"minutes":6.5,"cards":4,"dnfs":0,"report":"vrclog_20260807_224646_vhe_interlagos-layout_f1_2025_race_r7.report.html"}],"drivers":[{"name":"x_man","ai":false,"starts":6,"cards":18,"caused":1,"solo":5,"dnf":0},{"name":"Oscar Piastri","ai":true,"starts":5,"cards":8,"caused":2,"solo":0,"dnf":1},{"name":"Yuki Tsunoda","ai":true,"starts":5,"cards":8,"caused":2,"solo":0,"dnf":1},{"name":"Alex Albon","ai":true,"starts":5,"cards":7,"caused":3,"solo":0,"dnf":1},{"name":"Charles Leclerc","ai":true,"starts":5,"cards":7,"caused":5,"solo":0,"dnf":1},{"name":"Isack Hadjar","ai":true,"starts":5,"cards":7,"caused":3,"solo":0,"dnf":0},{"name":"Nico Hulkenberg","ai":true,"starts":5,"cards":6,"caused":2,"solo":0,"dnf":2},{"name":"Andrea Kimi Antonelli","ai":true,"starts":3,"cards":5,"caused":1,"solo":0,"dnf":2},{"name":"Esteban Ocon","ai":true,"starts":5,"cards":5,"caused":3,"solo":0,"dnf":2},{"name":"Kimi Antonelli","ai":true,"starts":2,"cards":5,"caused":2,"solo":0,"dnf":0},{"name":"Lewis Hamilton","ai":true,"starts":4,"cards":5,"caused":1,"solo":0,"dnf":1},{"name":"Daniil Move","ai":true,"starts":4,"cards":4,"caused":1,"solo":0,"dnf":0},{"name":"Fernando Alonso","ai":true,"starts":2,"cards":4,"caused":2,"solo":0,"dnf":0},{"name":"Gabriel Bortoleto","ai":true,"starts":4,"cards":4,"caused":0,"solo":0,"dnf":2},{"name":"George Russell","ai":true,"starts":4,"cards":4,"caused":2,"solo":0,"dnf":1},{"name":"Liam Lawson","ai":true,"starts":3,"cards":4,"caused":2,"solo":0,"dnf":1},{"name":"Pierre Gasly","ai":true,"starts":4,"cards":4,"caused":1,"solo":0,"dnf":2},{"name":"Dan Mezza","ai":true,"starts":3,"cards":3,"caused":0,"solo":0,"dnf":2},{"name":"Franco Colapinto","ai":true,"starts":2,"cards":3,"caused":2,"solo":0,"dnf":2},{"name":"J.W Alexander","ai":true,"starts":1,"cards":3,"caused":0,"solo":0,"dnf":0},{"name":"Lance Stroll","ai":true,"starts":2,"cards":3,"caused":6,"solo":0,"dnf":1},{"name":"Lando Norris","ai":true,"starts":6,"cards":3,"caused":0,"solo":0,"dnf":0},{"name":"Max Verstappen","ai":true,"starts":2,"cards":3,"caused":2,"solo":0,"dnf":0},{"name":"Carlos Sainz","ai":true,"starts":1,"cards":2,"caused":0,"solo":0,"dnf":1},{"name":"Francesco Bruschi","ai":true,"starts":3,"cards":2,"caused":1,"solo":0,"dnf":0},{"name":"Oliver Bearman","ai":true,"starts":4,"cards":2,"caused":3,"solo":0,"dnf":1},{"name":"Youssef Kali","ai":true,"starts":2,"cards":2,"caused":0,"solo":0,"dnf":1},{"name":"Bruno Alias","ai":true,"starts":1,"cards":1,"caused":0,"solo":0,"dnf":0},{"name":"Federico Campi","ai":true,"starts":3,"cards":1,"caused":0,"solo":0,"dnf":0},{"name":"Khalid Al-Qassimi","ai":true,"starts":1,"cards":1,"caused":1,"solo":0,"dnf":0},{"name":"KiboOst","ai":true,"starts":2,"cards":1,"caused":0,"solo":0,"dnf":0},{"name":"Nicolas Gilbert","ai":true,"starts":1,"cards":1,"caused":0,"solo":0,"dnf":0},{"name":"Pontus Roman","ai":true,"starts":1,"cards":1,"caused":0,"solo":0,"dnf":0},{"name":"Tim Tsunvazo","ai":true,"starts":1,"cards":1,"caused":0,"solo":0,"dnf":0},{"name":"François Vilmot","ai":true,"starts":1,"cards":0,"caused":0,"solo":0,"dnf":0},{"name":"James Mottershead","ai":true,"starts":1,"cards":0,"caused":0,"solo":0,"dnf":0},{"name":"Simone Calì","ai":true,"starts":1,"cards":0,"caused":0,"solo":0,"dnf":0}],"hotspots":[{"track":"Montreal F1 2025","corner":"T8-9","n":4},{"track":"Spa F1 2025","corner":"T5-6 Les Combes","n":4},{"track":"Silverstone F1 2025","corner":"T2 Farm Curve","n":2},{"track":"Silverstone F1 2025","corner":"T6-7 Brooklands / Luffield","n":2},{"track":"Montreal F1 2025","corner":"T3-4","n":2},{"track":"Montreal F1 2025","corner":"T13-14 Wall of Champions","n":2},{"track":"Hungaroring F1 2025","corner":"T8","n":1},{"track":"Hungaroring F1 2025","corner":"T6-7","n":1},{"track":"Silverstone F1 2025","corner":"T1 Abbey","n":1},{"track":"Silverstone F1 2025","corner":"T17-18 Club","n":1},{"track":"Monaco F1 2025","corner":"T5 Mirabeau Haute","n":1},{"track":"Monaco F1 2025","corner":"T6 Grand Hotel Hairpin","n":1},{"track":"Montreal F1 2025","corner":"T6-7","n":1},{"track":"Spa F1 2025","corner":"T2-4 Eau Rouge / Raidillon","n":1},{"track":"Spa F1 2025","corner":"T10-11 Pouhon","n":1},{"track":"Interlagos 2025","corner":"T1-2 S do Senna","n":1}]};
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let LANG = (() => { try { return localStorage.getItem("vrcLang") || "zh"; } catch(e){ return "zh"; } })();
+const I18N = {
+  zh: {title:"VRC 赛季报告", sub:"{r} 场 · 生成于 {d}", races:"赛历", drivers:"车手榜",
+    driversHint:"事故卡 = 卷入严重度≥25 的事件；追尾致因 = 作为后车的追尾接触；独立失误 = 单车事故且无外因",
+    hot:"跨场失控热点（AI）",
+    cDate:"日期", cTrack:"赛道", cSession:"session", cCars:"车", cLaps:"圈", cMin:"分钟",
+    cCards:"事故卡", cDnf:"DNF", cReport:"报告",
+    cDriver:"车手", cStarts:"场次", cCaused:"追尾致因", cSolo:"独立失误", cPerRace:"卡/场",
+    cCorner:"弯角", cN:"次", open:"打开"},
+  en: {title:"VRC Season Report", sub:"{r} sessions · generated {d}", races:"Calendar", drivers:"Drivers",
+    driversHint:"cards = involved in severity≥25 episodes; caused = rear-ended someone; solo = single-car incident with no external cause",
+    hot:"Cross-race loss-of-control hotspots (AI)",
+    cDate:"Date", cTrack:"Track", cSession:"Session", cCars:"Cars", cLaps:"Laps", cMin:"Min",
+    cCards:"Cards", cDnf:"DNF", cReport:"Report",
+    cDriver:"Driver", cStarts:"Starts", cCaused:"Caused", cSolo:"Solo errors", cPerRace:"Cards/race",
+    cCorner:"Corner", cN:"Count", open:"open"},
+};
+const T = (k, v) => { let s = I18N[LANG][k] || k;
+  if (v) for (const key in v) s = s.replace("{"+key+"}", v[key]); return s; };
+function render(){
+  document.documentElement.lang = LANG;
+  document.getElementById("langbtn").textContent = "LANG: " + (LANG === "zh" ? "EN" : "中文");
+  document.getElementById("title").textContent = T("title");
+  document.title = T("title");
+  document.getElementById("sub").textContent = T("sub", {r: DATA.races.length, d: DATA.generated});
+  document.getElementById("h-races").textContent = T("races");
+  document.getElementById("h-drivers").textContent = T("drivers");
+  document.getElementById("drivers-hint").textContent = T("driversHint");
+  document.getElementById("h-hot").textContent = T("hot");
+  document.getElementById("races").innerHTML =
+    `<tr><th>${T("cDate")}</th><th>${T("cTrack")}</th><th>${T("cSession")}</th>
+     <th>${T("cCars")}</th><th>${T("cLaps")}</th><th>${T("cMin")}</th>
+     <th>${T("cCards")}</th><th>${T("cDnf")}</th><th>${T("cReport")}</th></tr>` +
+    DATA.races.map(r => `<tr><td class="num">${esc(r.date)}</td><td>${esc(r.track)}</td>
+      <td>${esc(r.session)}</td><td>${r.cars}</td><td>${r.laps}</td>
+      <td class="num">${r.minutes}</td><td>${r.cards}</td><td>${r.dnfs}</td>
+      <td>${r.report ? `<a href="${esc(r.report)}">${T("open")}</a>` : "—"}</td></tr>`).join("");
+  const dmax = Math.max(1, ...DATA.drivers.map(d => d.cards));
+  document.getElementById("drivers").innerHTML =
+    `<tr><th>${T("cDriver")}</th><th>${T("cStarts")}</th><th>${T("cCards")}</th>
+     <th>${T("cCaused")}</th><th>${T("cSolo")}</th><th>DNF</th><th>${T("cPerRace")}</th></tr>` +
+    DATA.drivers.map(d => `<tr><td>${esc(d.name)}${d.ai ? "" : " ★"}</td>
+      <td>${d.starts}</td>
+      <td><span class="bar" style="width:${d.cards/dmax*120}px"></span>${d.cards}</td>
+      <td>${d.caused}</td><td>${d.solo}</td><td>${d.dnf}</td>
+      <td class="num">${(d.cards / Math.max(1, d.starts)).toFixed(2)}</td></tr>`).join("");
+  const hmax = Math.max(1, ...DATA.hotspots.map(h => h.n));
+  document.getElementById("hot").innerHTML =
+    `<tr><th>${T("cTrack")}</th><th>${T("cCorner")}</th><th>${T("cN")}</th></tr>` +
+    DATA.hotspots.map(h => `<tr><td>${esc(h.track)}</td><td>${esc(h.corner)}</td>
+      <td><span class="bar" style="width:${h.n/hmax*120}px"></span>${h.n}</td></tr>`).join("");
+}
+document.getElementById("langbtn").onclick = () => {
+  LANG = LANG === "zh" ? "en" : "zh";
+  try { localStorage.setItem("vrcLang", LANG); } catch(e){}
+  render();
+};
+render();
+</script></body></html>
