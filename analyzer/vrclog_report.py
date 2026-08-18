@@ -3,6 +3,7 @@
 Usage:
   py vrclog_report.py <vrclog_....txt> [--out report.html] [--ai fast_lane.ai]
                       [--corners corners.json] [--ac-root <path>]
+                      [--season-link season.html]
 
 Defaults: fast_lane.ai auto-resolved from the log's track id under the AC install;
 corners json auto-picked from ./corners/<trackFull with '-'>.json; output written
@@ -77,6 +78,8 @@ def main():
     ap.add_argument("--ai")
     ap.add_argument("--corners")
     ap.add_argument("--ac-root", default=AC_ROOT_DEFAULT)
+    ap.add_argument("--season-link", metavar="HREF",
+                    help="add a header link back to a season dashboard page")
     a = ap.parse_args()
 
     t0 = time.time()
@@ -105,6 +108,8 @@ def main():
     print(f"[4/5] attribution done: {cards} incident cards")
 
     payload, rep_bin = report_html.build_payload(rd, an, tm)
+    if a.season_link:
+        payload["seasonLink"] = a.season_link
     out = a.out or (os.path.splitext(a.log)[0] + ".report.html")
     report_html.render(payload, rep_bin, os.path.join(HERE, "report_template.html"), out)
     size = os.path.getsize(out) / 1e6

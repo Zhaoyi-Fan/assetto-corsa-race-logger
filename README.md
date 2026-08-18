@@ -151,6 +151,7 @@ Options:
 | `--ac-root PATH` | `AC_ROOT` env var, else auto-detected Steam path | where to find track data |
 | `--ai PATH` | auto from the log's track id | explicit `fast_lane.ai` |
 | `--corners PATH` | `analyzer/corners/<track>-<layout>.json` | corner-name config |
+| `--season-link HREF` | off | add a header link back to a season dashboard (e.g. `season.html`) |
 
 ### 4. Season dashboard (optional)
 

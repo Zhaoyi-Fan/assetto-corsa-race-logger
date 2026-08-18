@@ -113,9 +113,9 @@ def summarize(path, rd, an, out_dir):
 
 
 PAGE = """<!doctype html>
-<html lang="zh"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VRC 赛季报告</title>
+<title>VRC Season Report</title>
 <style>
 :root{--bg:#101318;--bg2:#171b22;--bg3:#1f242e;--line:#2a3140;--fg:#e8ebf0;
   --dim:#9aa3b2;--acc:#3b7ddd;--bad:#e8433f;font-size:15px}
@@ -148,7 +148,7 @@ a{color:var(--acc);text-decoration:none} a:hover{text-decoration:underline}
 const DATA = /*__SEASON_JSON__*/null;
 const esc = s => String(s).replace(/[&<>"']/g,
   c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let LANG = (() => { try { return localStorage.getItem("vrcLang") || "zh"; } catch(e){ return "zh"; } })();
+let LANG = (() => { try { return localStorage.getItem("vrcLang") || "en"; } catch(e){ return "en"; } })();
 const I18N = {
   zh: {title:"VRC 赛季报告", sub:"{r} 场 · 生成于 {d}", races:"赛历", drivers:"车手榜",
     driversHint:"事故卡 = 卷入严重度≥25 的事件；追尾致因 = 作为后车的追尾接触；独立失误 = 单车事故且无外因",

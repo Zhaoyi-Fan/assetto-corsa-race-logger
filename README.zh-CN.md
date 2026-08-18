@@ -114,7 +114,8 @@ python analyzer/vrclog_report.py "<AC 根目录>\logs\vrclog_20260709_..._race.t
 Safari 16.4+，回放二进制用 zlib 压缩、浏览器端 `DecompressionStream` 解压）。
 
 参数：`--out 输出路径`、`--ac-root AC 根目录`（默认读 `AC_ROOT` 环境变量，否则自动探测
-Steam 路径）、`--ai fast_lane.ai 路径`、`--corners 弯名 json`。
+Steam 路径）、`--ai fast_lane.ai 路径`、`--corners 弯名 json`、`--season-link 赛季页链接`
+（报告页头加返回赛季面板的按钮）。
 
 ### 4. 赛季面板（可选）
 

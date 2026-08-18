@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VRC 比赛报告</title>
+<title>VRC Race Report</title>
 <style>
 :root{
   --bg:#101318; --bg2:#171b22; --bg3:#1f242e; --line:#2a3140; --fg:#e8ebf0;
@@ -14,6 +14,7 @@
 body{background:var(--bg); color:var(--fg); font-family:"Segoe UI",system-ui,sans-serif}
 header{padding:14px 22px 10px; border-bottom:1px solid var(--line); background:var(--bg2); position:relative}
 #langbtn{position:absolute; top:14px; right:22px}
+#seasonbtn{position:absolute; top:14px; right:122px; text-decoration:none}
 header h1{font-size:1.25rem; font-weight:600}
 .chips{margin-top:6px; display:flex; flex-wrap:wrap; gap:6px}
 .chip{background:var(--bg3); border:1px solid var(--line); border-radius:20px;
@@ -107,6 +108,7 @@ tr.csx>td{background:var(--bg2); border:1px solid var(--line); padding:12px 14px
 <body>
 <header>
   <h1 id="title">VRC Race Report</h1>
+  <a class="btn" id="seasonbtn" data-i18n="seasonBtn" hidden></a>
   <button class="btn" id="langbtn">EN</button>
   <div class="chips" id="metachips"></div>
 </header>
@@ -217,7 +219,7 @@ const esc = s => String(s).replace(/[&<>"']/g,
   c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 // ---------- i18n -------------------------------------------------------------------
-let LANG = (() => { try { return localStorage.getItem("vrcLang") || "zh"; } catch(e){ return "zh"; } })();
+let LANG = (() => { try { return localStorage.getItem("vrcLang") || "en"; } catch(e){ return "en"; } })();
 const I18N = {
   zh: {
     tabOverview:"总览", tabLaps:"圈速", tabDriving:"驾驶分析", tabTimeline:"时间轴", tabCards:"事故卡片", tabReplay:"回放",
@@ -272,6 +274,7 @@ const I18N = {
     reportTitle:"{track} — {session} 报告",
     tCol:"t", lapColS:"圈", sevCol:"严重度", titleCol:"标题", involvedCol:"涉及",
     wxLabel:"抓地 {g0}–{g1}% · 雨 {r}",
+    seasonBtn:"← 赛季",
   },
   en: {
     tabOverview:"Overview", tabLaps:"Lap times", tabDriving:"Driving", tabTimeline:"Timeline", tabCards:"Incidents", tabReplay:"Replay",
@@ -326,6 +329,7 @@ const I18N = {
     reportTitle:"{track} — {session} report",
     tCol:"t", lapColS:"Lap", sevCol:"Sev", titleCol:"Title", involvedCol:"Involved",
     wxLabel:"grip {g0}–{g1}% · rain {r}",
+    seasonBtn:"← Season",
   },
 };
 function T(key, vars){
@@ -1820,7 +1824,6 @@ function showTip(x, y, html){
 // ---------- language switch + boot ------------------------------------------------------------
 function setLang(l){
   LANG = l;
-  try { localStorage.setItem("vrcLang", l); } catch(e){}
   document.documentElement.lang = l === "zh" ? "zh" : "en";
   document.getElementById("langbtn").textContent = "LANG: " + (l === "zh" ? "EN" : "中文");
   applyStatic(); buildHeader(); buildOverview(); buildCards();
@@ -1831,7 +1834,11 @@ function setLang(l){
   if (document.getElementById("tab-laps").classList.contains("on")) drawLapsTab();
   if (document.getElementById("tab-driving").classList.contains("on")) renderDriving();
 }
-document.getElementById("langbtn").onclick = () => setLang(LANG === "zh" ? "en" : "zh");
+document.getElementById("langbtn").onclick = () => {
+  const l = LANG === "zh" ? "en" : "zh";
+  try { localStorage.setItem("vrcLang", l); } catch(e){}   // persist only explicit choices
+  setLang(l);
+};
 
 window.addEventListener("resize", () => {
   if (document.getElementById("tab-overview").classList.contains("on")) drawLapChart();
@@ -1842,6 +1849,10 @@ window.addEventListener("resize", () => {
   if (document.getElementById("tab-driving").classList.contains("on")) renderDriving();
 });
 
+if (DATA.seasonLink){    // set by --season-link: link back to the season dashboard
+  const b = document.getElementById("seasonbtn");
+  b.href = DATA.seasonLink; b.hidden = false;
+}
 setLang(LANG);   // static UI renders immediately; replay unlocks when decoded
 drawLapChart();
 decodeReplay().then(() => {
