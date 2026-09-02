@@ -43,6 +43,12 @@ python analyzer/vrclog_report.py examples/vrclog_20260803_231630_spa-layout_f1_2
 （复现需要本机装有 spa `layout_f1_2025` 赛道 mod——分析器要读它的 AI line；只看示例报告
 则什么都不需要。）
 
+**[▶ 打开赛季面板](https://zhaoyi-fan.github.io/assetto-corsa-race-logger/examples/season/)** —
+7 场联赛、7 条赛道（蒙特利尔、摩纳哥、斯帕、匈格罗林、银石、英特拉格斯、赞德沃特），由
+`season_report.py` 聚合：赛历、车手事故榜、跨场失控热点弯。赛历每一行都能打开那场的完整
+报告，每份报告的标题栏都有返回面板的按钮（`--season-link`）；整套文件在
+[`examples/season/`](examples/season/)。
+
 ## 组成
 
 | 组件 | 作用 |
@@ -124,7 +130,8 @@ python analyzer/season_report.py "<AC 根目录>\logs" --out season.html
 ```
 
 接受目录/通配符/单个 log/`.parts`；默认跳过 5 分钟以下的残段（`--min-minutes` 可调）；
-赛历行自动链接到旁边的单场报告。
+赛历行自动链接到旁边的单场报告——单场报告先用 `--season-link season.html` 生成，两边就能
+互相跳转。
 
 ## 新赛道：弯名配置
 
@@ -146,7 +153,7 @@ python analyzer/tests/test_pipeline.py
 ```
 
 端到端合成测试：程序生成的体育场赛道（v7 `fast_lane.ai` 二进制）+ 剧本化 log（追尾→打转→
-冲出→困住→回收退赛、倒挡诱饵、撞墙、黄旗、缺 tick 车、零数据车），30 项断言覆盖解析对齐、
+冲出→困住→回收退赛、倒挡诱饵、撞墙、黄旗、缺 tick 车、零数据车），49 项断言覆盖解析对齐、
 检测、归因与报告渲染。
 
 技术细节：报告=模板+JSON+base64(zlib(回放二进制))，无 CDN 无跟踪，`file://` 可开；回放流

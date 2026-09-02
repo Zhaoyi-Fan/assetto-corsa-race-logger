@@ -49,6 +49,13 @@ python analyzer/vrclog_report.py examples/vrclog_20260803_231630_spa-layout_f1_2
 (Regeneration reads the track's AI line from your AC install, so it needs the spa
 `layout_f1_2025` track mod; viewing the shipped report needs nothing.)
 
+**[▶ Open a season dashboard](https://zhaoyi-fan.github.io/assetto-corsa-race-logger/examples/season/)** —
+seven league races on seven tracks (Montreal, Monaco, Spa, Hungaroring, Silverstone, Interlagos,
+Zandvoort) aggregated by `season_report.py`: race calendar, driver incident league table and
+cross-race loss-of-control hotspots. Every calendar row opens that race's full report and every
+report's header links back to the dashboard (`--season-link`); the whole set lives in
+[`examples/season/`](examples/season/).
+
 ## What you get
 
 | Component | What it does |
@@ -161,7 +168,8 @@ python analyzer/season_report.py "<AC root>\logs" --out season.html
 
 Accepts directories, globs, single logs or `.parts` folders. Skips sub-5-minute stubs (aborted
 starts / restarts) by default (`--min-minutes`). Race rows link to per-race reports when they sit
-next to their logs.
+next to their logs; generate those reports with `--season-link season.html` first and the two
+pages link both ways.
 
 ## New tracks: corner names
 
@@ -189,7 +197,7 @@ python analyzer/tests/test_pipeline.py
 runs an end-to-end test on a fully synthetic race: a generated stadium track (v7 `fast_lane.ai`
 binary) and a scripted log containing a rear-end → spin → off → stuck → auto-recovered-DNF
 sequence, a reverse-gear decoy, a wall hit, a caution, a car with missing ticks and a car with no
-data at all — asserting parser alignment, detection, attribution and report rendering (30 checks).
+data at all — asserting parser alignment, detection, attribution and report rendering (49 checks).
 
 Technical notes:
 
