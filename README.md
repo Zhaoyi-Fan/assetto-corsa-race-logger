@@ -20,7 +20,8 @@ offline, share a link. This project applies the same idea to Assetto Corsa:
 1. **Record everything, always.** A lightweight in-game app continuously samples the full physics
    state of *every* car (offline AI run full local physics, so their data is as complete as the
    player's) plus every discrete event — collisions, laps, pit stops, resets, flags,
-   race-start reaction times.
+   race-start reaction times — and, since V1.4, the hybrid energy state of every car
+   (MGU-K power, battery charge, per-lap deploy / harvest, straight-mode and overtake use).
 2. **Analyze offline.** A Python pipeline detects losses of control (spin / slide / understeer-off /
    oversteer-off / stuck), groups them into multi-car *episodes*, and builds an evidence-based
    cause chain for each one.
@@ -60,10 +61,17 @@ report's header links back to the dashboard (`--season-link`); the whole set liv
 
 | Component | What it does |
 |---|---|
-| `app/vrc_race_logger` | CSP Lua app: 15 Hz per-car physics stream, 1 Hz status stream, weather stream, event log. Crash-safe chunked writes. Read-only — no physics or content modification, league-safe. ~2 MB/min for a 16-car grid. |
+| `app/vrc_race_logger` | CSP Lua app: 15 Hz per-car physics stream, 1 Hz status stream, weather stream, event log, and (V1.4) a change-only 10 Hz energy stream with deploy / harvest / straight-mode / overtake events and per-lap energy summaries. Crash-safe chunked writes. Read-only — no physics or content modification, league-safe. ~2 MB/min for a 16-car grid. |
 | `analyzer/vrclog_report.py` | One command: log → `*.report.html` (typically ~3.5 MB, generated in ~1 s). |
-| `analyzer/season_report.py` | Aggregates a folder of logs into a season dashboard: calendar, driver incident league table, cross-race corner hotspots. |
-| `docs/log_format_spec.md` | The full plain-text log format contract (schema 1), field by field. |
+| `analyzer/season_report.py` | Aggregates a folder of logs into a season dashboard: calendar, driver incident league table, cross-race corner hotspots, per-track AI vs player energy deployment. |
+| `docs/log_format_spec.md` | The full plain-text log format contract (schema 1 and schema 2), field by field. |
+
+Energy data comes from two sources: every car exposes its battery charge, deploy input and
+delivery mode through CSP; cars whose physics script publishes a CAN channel table additionally
+give MGU-K power in kW, per-lap MJ counters, power caps, deployment strategy and the
+straight-mode latch. The VRC Formula Alpha 2026 Pro is the first profile (its channels are
+resolved by name at runtime, nothing is hard-coded); AI cars expose exactly the same data as the
+player, so a race log now shows what the AI's deployment strategy actually does.
 
 ### The report
 
@@ -90,10 +98,23 @@ report's header links back to the dashboard (`--season-link`); the whole set liv
 * **Incidents** — one card per episode: severity score, per-car narrative chain
   (`contact with X → spun → off track → stuck 12s → retired`), ranked evidence with confidence
   values, speed/brake sparkline, one-click jump into the replay.
+* **Energy** (v1.6, logs from logger V1.4+) — per-car deployment table (deploy / harvest MJ per
+  lap, battery at the line, minimum charge, charge drift over the race, peak kW, straight-mode
+  opens and seconds, overtake uses, power-limited time, Vmax, strategy) with the AI median as a
+  baseline; a power-along-the-lap chart (median kW by track position for the selected driver vs
+  the pooled AI, battery on the right axis) drawn over the layout's own zone file — straight-mode,
+  overtake detection / activation, power-reduction, power-reset and alternative-curve zones;
+  a per-lap energy table; and an energy event timeline (deploy / harvest / wing open /
+  overtake per car, click to jump into the replay).
 * **Replay** — 2D top-down map with the real track ribbon, all cars with heading + fading trails,
   follow-cam, live standings with gaps, per-wheel telemetry (ndSlip, surface type, inputs, β)
   with a live scrolling input trace, a full-race throttle/brake ribbon under the scrubber,
   lap-tick scrubber, 1–32× playback. Mouse wheel / pinch zoom, drag to pan, touch-friendly.
+  With energy logs (v1.6): MGU-K power and battery bars plus straight-mode / overtake /
+  power-limited tags in the telemetry panel, kW in the scrolling trace, battery per car in
+  the live standings, a battery line and wing-open ticks in the ribbon, and on the map a
+  blue / green glow for deploying / harvesting cars, a yellow ring for an open straight-mode
+  wing and a purple ring for overtake mode.
 
 ### Incident attribution
 
@@ -171,6 +192,20 @@ starts / restarts) by default (`--min-minutes`). Race rows link to per-race repo
 next to their logs; generate those reports with `--season-link season.html` first and the two
 pages link both ways.
 
+### 5. Compare deployment between logs (A/B experiments)
+
+```
+python analyzer/energy_compare.py logA.txt logB.txt logC.txt --labels A,B,C --out compare.md --html compare.html
+```
+
+Pools every lap of every AI car with CAN data per log and prints one markdown table — deploy /
+harvest MJ per lap, SoC at the line and minimum, peak kW, share of deploy requests blocked by a
+zero power cap, deploy / straight-mode / power-limited seconds per lap, Vmax, lap times, STRAT
+and PU mode — each arm next to the first log with deltas, plus a per-zone breakdown of where
+along the lap the AI deploys (using the layout's own zone file) and, with `--html`, a page that
+overlays the arms' pooled AI kW / SoC profiles. Made for "why doesn't the AI deploy"
+experiments: change one AI setting, run the same race, compare. Needs no track model.
+
 ## New tracks: corner names
 
 First run on an unknown track auto-detects corner segments from the AI line's curvature profile,
@@ -197,14 +232,18 @@ python analyzer/tests/test_pipeline.py
 runs an end-to-end test on a fully synthetic race: a generated stadium track (v7 `fast_lane.ai`
 binary) and a scripted log containing a rear-end → spin → off → stuck → auto-recovered-DNF
 sequence, a reverse-gear decoy, a wall hit, a caution, a car with missing ticks and a car with no
-data at all — asserting parser alignment, detection, attribution and report rendering (49 checks).
+data at all — asserting parser alignment, detection, attribution and report rendering, then the
+same race again as a schema-2 log with scripted energy telemetry (a CAN car, a native-only car,
+straight-mode / overtake / power zones) checking the energy analysis, profiles and the Energy tab
+(76 checks).
 
 Technical notes:
 
 * The report is one file: template + JSON payload + base64(zlib(replay binary)) — no CDN, no
   tracking, works from `file://`.
-* Replay stream: 28 bytes/sample/car at 15 Hz (position, heading, speed, inputs, gear,
-  per-wheel slip + surface, slip angle, spline), decoded in the browser into typed arrays.
+* Replay stream: 40 bytes/sample/car at 15 Hz (position, heading, speed, inputs, gear,
+  per-wheel slip + surface, slip angle, spline, G forces, MGU-K kW, battery, energy mode
+  flags), decoded in the browser into typed arrays.
 * All log-sourced strings (driver / car / track names) are HTML-escaped before hitting the DOM —
   a report shared to a league is rendered in other people's browsers, and mod content is not
   trusted markup.

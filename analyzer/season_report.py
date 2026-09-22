@@ -25,6 +25,7 @@ import vrclog_parser
 import vrclog_report
 import detectors
 import attribution
+import energy
 import thresholds as th
 
 AC_ROOT_DEFAULT = vrclog_report.AC_ROOT_DEFAULT
@@ -85,6 +86,12 @@ def summarize(path, rd, an, out_dir):
         "dnfs": len(set(an.dnfs)),
         "report": link,
     }
+    # hybrid energy digest (schema-2 logs only; None otherwise)
+    try:
+        race["energy"] = energy.season_summary(energy.analyze(rd))
+    except Exception as e:
+        print(f"[warn] {os.path.basename(path)}: energy digest skipped ({e})")
+        race["energy"] = None
 
     drivers = {}
     for ci in range(rd.n_cars):
@@ -142,6 +149,7 @@ a{color:var(--acc);text-decoration:none} a:hover{text-decoration:underline}
 <h2 id="h-races"></h2><table id="races"></table>
 <h2 id="h-drivers"></h2><div class="hint" id="drivers-hint"></div><table id="drivers"></table>
 <h2 id="h-hot"></h2><table id="hot"></table>
+<h2 id="h-energy"></h2><div class="hint" id="energy-hint"></div><table id="energy"></table>
 </main>
 <script>
 "use strict";
@@ -156,14 +164,22 @@ const I18N = {
     cDate:"日期", cTrack:"赛道", cSession:"session", cCars:"车", cLaps:"圈", cMin:"分钟",
     cCards:"事故卡", cDnf:"DNF", cReport:"报告",
     cDriver:"车手", cStarts:"场次", cCaused:"追尾致因", cSolo:"独立失误", cPerRace:"卡/场",
-    cCorner:"弯角", cN:"次", open:"打开"},
+    cCorner:"弯角", cN:"次", open:"打开",
+    energy:"混动能量（每赛道，logger V1.4+ 日志）",
+    energyHint:"每圈中位数：AI = 各 AI 车中位数的中位数；漂移 = 末圈过线 SoC − 首圈过线 SoC；没有能量数据的场次不列",
+    cAiCars:"AI 车", cAiDep:"AI 部署 MJ/圈", cPlDep:"玩家 部署 MJ/圈", cAiReg:"AI 回收 MJ/圈",
+    cAiKw:"AI 峰值 kW", cAiDrift:"AI SoC 漂移", cPlDrift:"玩家 SoC 漂移", cAiSm:"AI SM s/圈", cPlSm:"玩家 SM s/圈"},
   en: {title:"VRC Season Report", sub:"{r} sessions · generated {d}", races:"Calendar", drivers:"Drivers",
     driversHint:"cards = involved in severity≥25 episodes; caused = rear-ended someone; solo = single-car incident with no external cause",
     hot:"Cross-race loss-of-control hotspots (AI)",
     cDate:"Date", cTrack:"Track", cSession:"Session", cCars:"Cars", cLaps:"Laps", cMin:"Min",
     cCards:"Cards", cDnf:"DNF", cReport:"Report",
     cDriver:"Driver", cStarts:"Starts", cCaused:"Caused", cSolo:"Solo errors", cPerRace:"Cards/race",
-    cCorner:"Corner", cN:"Count", open:"open"},
+    cCorner:"Corner", cN:"Count", open:"open",
+    energy:"Hybrid energy per track (logger V1.4+ logs)",
+    energyHint:"per-lap medians: AI = median over the AI cars' medians; drift = last-lap SoC at the line − first-lap SoC; sessions without energy data are not listed",
+    cAiCars:"AI cars", cAiDep:"AI deploy MJ/lap", cPlDep:"Player deploy MJ/lap", cAiReg:"AI harvest MJ/lap",
+    cAiKw:"AI peak kW", cAiDrift:"AI SoC drift", cPlDrift:"Player SoC drift", cAiSm:"AI SM s/lap", cPlSm:"Player SM s/lap"},
 };
 const T = (k, v) => { let s = I18N[LANG][k] || k;
   if (v) for (const key in v) s = s.replace("{"+key+"}", v[key]); return s; };
@@ -199,6 +215,22 @@ function render(){
     `<tr><th>${T("cTrack")}</th><th>${T("cCorner")}</th><th>${T("cN")}</th></tr>` +
     DATA.hotspots.map(h => `<tr><td>${esc(h.track)}</td><td>${esc(h.corner)}</td>
       <td><span class="bar" style="width:${h.n/hmax*120}px"></span>${h.n}</td></tr>`).join("");
+  const en = DATA.races.filter(r => r.energy && r.energy.aiCars);
+  const f = (v, nd) => (v === null || v === undefined) ? "—" : Number(v).toFixed(nd);
+  const pct = v => (v === null || v === undefined) ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(0) + "%";
+  document.getElementById("h-energy").style.display = en.length ? "" : "none";
+  document.getElementById("energy-hint").style.display = en.length ? "" : "none";
+  document.getElementById("h-energy").textContent = T("energy");
+  document.getElementById("energy-hint").textContent = T("energyHint");
+  document.getElementById("energy").innerHTML = !en.length ? "" :
+    `<tr><th>${T("cDate")}</th><th>${T("cTrack")}</th><th>${T("cAiCars")}</th><th>${T("cAiDep")}</th>
+     <th>${T("cPlDep")}</th><th>${T("cAiReg")}</th><th>${T("cAiKw")}</th><th>${T("cAiDrift")}</th>
+     <th>${T("cPlDrift")}</th><th>${T("cAiSm")}</th><th>${T("cPlSm")}</th></tr>` +
+    en.map(r => `<tr><td class="num">${esc(r.date)}</td><td>${esc(r.track)}</td><td>${r.energy.aiCars}</td>
+      <td class="num">${f(r.energy.aiDep, 2)}</td><td class="num">${f(r.energy.plDep, 2)}</td>
+      <td class="num">${f(r.energy.aiReg, 2)}</td><td class="num">${f(r.energy.aiKwMax, 0)}</td>
+      <td class="num">${pct(r.energy.aiSocDrift)}</td><td class="num">${pct(r.energy.plSocDrift)}</td>
+      <td class="num">${f(r.energy.aiSm, 1)}</td><td class="num">${f(r.energy.plSm, 1)}</td></tr>`).join("");
 }
 document.getElementById("langbtn").onclick = () => {
   LANG = LANG === "zh" ? "en" : "zh";

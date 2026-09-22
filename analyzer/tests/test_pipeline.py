@@ -14,8 +14,10 @@ detectors, attribution and report rendering behavior:
 
 Run:  py tests/test_pipeline.py
 """
+import json
 import math
 import os
+import shutil
 import struct
 import sys
 import tempfile
@@ -28,6 +30,8 @@ import track_model
 import detectors
 import attribution
 import corner_style
+import energy
+import energy_compare
 import report_html
 import thresholds as th
 
@@ -70,30 +74,155 @@ def write_ai(path):
         f.write(b"".join(out))
 
 
-def build_log():
+# schema-2 energy scenario (logger V1.4): car 0 (player) and car 2 (AI) publish CAN data,
+# car 1 is a native-only car (SoC wobble, no kW), car 3 has no data at all.
+# kW along the lap: deploy on both straights from 2 % in (player 350 kW until 20 %,
+# AI 200 kW until 12 %), harvest -300 kW through the first 11 % of each corner.
+# One straight-mode zone 5–25 % (latch 2 at 3 %, 4 inside), overtake detection 48 % / start
+# 50 % used by car 2 on its second lap only, one power-reduction zone 55–65 %.
+EN_PEAK = {0: 350.0, 2: 200.0}
+EN_END = {0: 0.20, 2: 0.12}
+ENERGY_EXPECTED = {}   # car -> [(lap_n, dep_mj, reg_mj)] as written into the ELAP lines
+
+
+def kw_at(ci, s):
+    if ci not in EN_PEAK:
+        return None
+    for base in (0.0, 0.5):
+        if base + 0.02 <= s < base + EN_END[ci]:
+            return EN_PEAK[ci]
+    for base in (0.28, 0.78):
+        if base <= s < base + 0.11:
+            return -300.0
+    return 0.0
+
+
+def blocked_at(ci, s):
+    """AI car 2 keeps asking for energy after its burst (12-20 % of each straight) but the
+    strategy caps the power at 0 -> a 'request blocked' segment for the request statistics."""
+    return ci == 2 and any(base + 0.12 <= s < base + 0.20 for base in (0.0, 0.5))
+
+
+def latch_at(s):
+    return 2 if 0.03 <= s < 0.05 else (4 if 0.05 <= s < 0.25 else 0)
+
+
+def ot_at(ci, s, lap):
+    if ci != 2 or lap != 1:
+        return 0
+    return 1 if 0.48 <= s < 0.5 else (2 if 0.5 <= s < 0.6 else 0)
+
+
+def build_log(schema=1):
+    energy_on = schema >= 2
     lines = [
-        "VRCLOG,1,1.3-test",
-        'META,{"schema":1,"date":"2026-07-10 12:00:00","track":"stadium",'
+        "VRCLOG,%d,%s" % (schema, "1.3-test" if schema == 1 else "1.4-test"),
+        'META,{"schema":%d,"date":"2026-07-10 12:00:00","track":"stadium",'
         '"trackFull":"stadium/gp","trackName":"Stadium GP","trackLengthM":%.1f,'
         '"sessionIndex":0,"sessionType":3,"sessionName":"race","laps":3,'
         '"durationMin":0,"timedRace":false,"cars":4,"fastHz":15,"slowHz":1,'
         '"weatherEvery":5,"simTime0":0,"systemTime":0,"restart":0,'
-        '"airTemp":22.0,"roadTemp":30.0,"grip":0.980,"rain":0.000}' % L,
+        '"airTemp":22.0,"roadTemp":30.0,"grip":0.980,"rain":0.000%s}'
+        % (schema, L, ',"energy":true,"energyHz":10' if energy_on else ""),
         'CAR,0,{"driver":"TestPlayer","car":"vrc_fa","skin":"red","ai":false,'
         '"aiLevel":1.0,"aiAggression":0.0,"ballast":0.0,"restrictor":0.0,'
-        '"maxFuel":100.0,"compound":2}',
-        'CAR,1,{"driver":"AI Alpha","car":"vrc_fa","skin":"blu","ai":true,'
+        '"maxFuel":100.0,"compound":2%s}' % (',"energy":"can"' if energy_on else ""),
+        'CAR,1,{"driver":"AI Alpha","car":"%s","skin":"blu","ai":true,'
         '"aiLevel":0.97,"aiAggression":0.6,"ballast":0.0,"restrictor":0.0,'
-        '"maxFuel":100.0,"compound":2}',
+        '"maxFuel":100.0,"compound":2%s}'
+        % ("vrc_fa_native" if energy_on else "vrc_fa", ',"energy":"native"' if energy_on else ""),
         'CAR,2,{"driver":"AI Bravo","car":"vrc_fa","skin":"grn","ai":true,'
         '"aiLevel":0.96,"aiAggression":0.7,"ballast":0.0,"restrictor":0.0,'
-        '"maxFuel":100.0,"compound":2}',
+        '"maxFuel":100.0,"compound":2%s}' % (',"energy":"can"' if energy_on else ""),
         'CAR,3,{"driver":"AI Ghost","car":"vrc_fa","skin":"wht","ai":true,'
         '"aiLevel":0.95,"aiAggression":0.5,"ballast":0.0,"restrictor":0.0,'
-        '"maxFuel":100.0,"compound":2}',
+        '"maxFuel":100.0,"compound":2%s}' % (',"energy":"can"' if energy_on else ""),
     ]
+    if energy_on:
+        lines.append(
+            'ZONES,{"file":"stadium/gp/data/drs_zones.ini","exists":true,"sections":{'
+            '"ZONE_0":{"START":0.05,"END":0.25,"SESSION_TYPE":"ALL"},'
+            '"ZONE_OVERTAKE":{"DETECTION":0.48,"START":0.5,"SESSION_TYPE":"ALL","DETECTION_GAP_S":1},'
+            '"ZONE_POWER_REDUCTION_0":{"START":0.55,"END":0.65,"POWER_REDUCTION_KW":350,'
+            '"SESSION_TYPE":"ALL"}}}')
+        lines.append('ENERGY,{"car":"vrc_fa","profile":"can","key":"vrc_fa_CAN","inputs":122,'
+                     '"idx":{"kW":162,"kIn":5,"depMJ":139},"error":""}')
+        lines.append('ENERGY,{"car":"vrc_fa_native","profile":"native"}')
+        ENERGY_EXPECTED.clear()
     dist = [0.0, -12.0, -24.0]           # start offsets (m along the line)
     laps = [0, 0, 0]
+    en = {ci: {"dep": 0.0, "reg": 0.0, "soc": 1.0, "socmin": 1.0, "socmax": 1.0,
+               "latch": 0, "ot": 0, "deploying": False, "harvesting": False,
+               "ms": [0.0] * 5, "last_e": None} for ci in range(3)}
+
+    def emit_energy(t_ms, ci):
+        st = en[ci]
+        s = (dist[ci] % L) / L
+        kw = kw_at(ci, s)
+        if ci == 0 and kw is not None and T_REV0 <= t_ms / 1000.0 < T_REV1:
+            kw = 0.0   # parked in reverse on the straight: no deployment
+        dt_s = 1.0 / HZ
+        if kw is None:                      # native car: only the SoC is observable
+            st["soc"] = 0.9 + 0.05 * math.sin(t_ms / 1000.0)
+        else:
+            if kw > 0:
+                st["dep"] += kw * dt_s / 1000
+            elif kw < 0:
+                st["reg"] += -kw * dt_s / 1000
+            st["soc"] = min(1.0, max(0.0, st["soc"] - kw * dt_s / 1000 / 4))
+        st["socmin"] = min(st["socmin"], st["soc"])
+        st["socmax"] = max(st["socmax"], st["soc"])
+        if kw is not None:
+            ev = lambda kind, state: lines.append(
+                "EV,%d,%s,%d,%d,%.5f,%.1f,%.4f,%.1f" % (t_ms, kind, ci, state, s, 180.0, st["soc"], kw))
+            dep_on, har_on = kw >= 10, kw <= -10
+            if dep_on != st["deploying"]:
+                st["deploying"] = dep_on
+                ev("DEPLOY", 1 if dep_on else 0)
+            if har_on != st["harvesting"]:
+                st["harvesting"] = har_on
+                ev("HARVEST", 1 if har_on else 0)
+            latch = latch_at(s)
+            if latch != st["latch"]:
+                st["latch"] = latch
+                ev("SM", latch)
+            ot = ot_at(ci, s, laps[ci])
+            if ot != st["ot"]:
+                st["ot"] = ot
+                ev("OT", ot)
+            tick_ms = 1000.0 / HZ
+            for j, on in enumerate((st["deploying"], st["harvesting"], latch == 4, ot == 2, False)):
+                if on:
+                    st["ms"][j] += tick_ms
+            flags = (4 if ot == 2 else 0) + (8 if ot == 1 else 0) + (128 if latch == 4 else 0) \
+                + (64 if kw < 0 else 0)
+            blocked = blocked_at(ci, s)
+            key = (round(kw), round(st["soc"] * 100), round(st["dep"] * 10), latch, ot, blocked)
+            if key != st["last_e"]:
+                st["last_e"] = key
+                lines.append("E,%d,%d,%.1f,%.4f,%.3f,%.3f,%.2f,%.2f,%.0f,350,1,%d,%d,1,%d"
+                             % (t_ms, ci, kw, st["soc"], st["dep"], st["reg"],
+                                1.0 if (kw > 0 or blocked) else 0.0, 0.5 if kw < 0 else 0.0,
+                                EN_PEAK[ci] if kw > 0 else 0.0, int(s * 15), latch, flags))
+        else:
+            key = (round(st["soc"] * 100),)
+            if key != st["last_e"]:
+                st["last_e"] = key
+                lines.append("E,%d,%d,,%.4f,,,0.00,,,,1,,,,64" % (t_ms, ci, st["soc"]))
+
+    def emit_elap(t_ms, ci):
+        st = en[ci]
+        if ci in EN_PEAK:
+            lines.append("EV,%d,ELAP,%d,%d,%.3f,%.3f,%.4f,%.4f,%.4f,%d,%d,%d,%d,%d"
+                         % (t_ms, ci, laps[ci], st["dep"], st["reg"], st["soc"],
+                            st["socmin"], st["socmax"], *[round(m) for m in st["ms"]]))
+        else:
+            lines.append("EV,%d,ELAP,%d,%d,,,%.4f,%.4f,%.4f,,,,,"
+                         % (t_ms, ci, laps[ci], st["soc"], st["socmin"], st["socmax"]))
+        ENERGY_EXPECTED.setdefault(ci, []).append((laps[ci], round(st["dep"], 3), round(st["reg"], 3)))
+        st["dep"] = st["reg"] = 0.0
+        st["socmin"] = st["socmax"] = st["soc"]
+        st["ms"] = [0.0] * 5
 
     def emit_f(t_ms, ci, d, spd_kmh, gear, beta_deg, out, surf):
         x, z = pos_at(d)
@@ -146,6 +275,12 @@ def build_log():
         dist[2] += 50.0 / HZ
         if not (20.0 <= t <= 20.4):
             emit_f(t_ms, 2, dist[2], 180.0, 6, 0.0, 0, 0x0000)
+        # --- energy (schema 2 only) ---------------------------------------------
+        if energy_on:
+            for ci in range(3):
+                if ci == 1 and t >= T_DNF:
+                    continue
+                emit_energy(t_ms, ci)
         # --- laps / S / W ------------------------------------------------------
         for ci in range(3):
             if ci == 1 and t >= T_DNF:
@@ -155,6 +290,8 @@ def build_log():
                 lines.append("EV,%d,LAP,%d,%d,1,0,%d,%d,%d"
                              % (t_ms, ci, int(L / 50 * 1000), laps[ci],
                                 14000, 14000))
+                if energy_on:
+                    emit_elap(t_ms, ci)
         if k % HZ == 0:
             for ci in range(3):
                 if ci == 1 and t >= T_DNF:
@@ -362,6 +499,163 @@ def main():
     check("compressed flag", '"compressed":true' in html_text)
     check("report size sane", os.path.getsize(out_html) > 50_000,
           str(os.path.getsize(out_html)))
+
+    print("energy (schema 2, logger V1.4)")
+    check("schema-1 log -> energy None", payload["energy"] is None and energy.analyze(rd) is None)
+    text2 = build_log(schema=2)
+    log2 = os.path.join(tmp, "vrclog_test_race_s2.txt")
+    with open(log2, "w", encoding="utf-8") as f:
+        f.write(text2)
+    rd2 = vrclog_parser.parse(log2)
+    check("schema 2 parsed, no bad lines", rd2.schema == 2 and rd2.bad_lines == 0,
+          f"schema={rd2.schema} bad={rd2.bad_lines}")
+    check("can cars = [0,2]", rd2.energy_cars == [True, False, True, False], str(rd2.energy_cars))
+    check("native car: E lines without kW",
+          len(rd2.E[1]["t"]) > 0 and not np.isfinite(rd2.E[1]["kw"]).any()
+          and int(rd2.E[1]["latch"][0]) == -1)
+    check("zones + sources parsed", bool(rd2.zones) and len(rd2.zones["sections"]) == 3
+          and set(rd2.energy_src) == {"vrc_fa", "vrc_fa_native"})
+    lap_n = sum(1 for l in rd2.ev_lap if l["car"] in (0, 1, 2))
+    check("ELAP per LAP", len(rd2.ev_elap) == lap_n and lap_n >= 6,
+          f"elap={len(rd2.ev_elap)} lap={lap_n}")
+    n_ev = sum(1 for e in rd2.events if e["type"] in ("DEPLOY", "HARVEST", "SM", "OT"))
+    check("energy events parsed", n_ev >= 30
+          and all("state" in e for e in rd2.events if e["type"] == "SM"), str(n_ev))
+    an2 = detectors.analyze(rd2, tm)
+    attribution.attribute(an2)
+    check("schema 2: same incidents as schema 1",
+          len(an2.episodes) == len(an.episodes) and an2.dnfs == an.dnfs)
+    blk = energy.analyze(rd2)
+    check("energy block", blk is not None and blk["hasCan"] and blk["bins"] == energy.BINS)
+    c0, c2 = blk["cars"][0], blk["cars"][2]
+    exp0 = [d for _, d, _ in ENERGY_EXPECTED[0]]
+    check("player deploy/lap = ELAP median",
+          c0["summary"]["depMed"] is not None
+          and abs(c0["summary"]["depMed"] - float(np.median(exp0))) < 1e-3,
+          f"{c0['summary']['depMed']} vs {exp0}")
+    check("player deploy/lap ~ 3.6 MJ (analytic)", abs(c0["summary"]["depMed"] - 3.6) < 0.25,
+          str(c0["summary"]["depMed"]))
+    check("AI deploy/lap ~ 1.14 MJ", c2["summary"]["depMed"] is not None
+          and abs(c2["summary"]["depMed"] - 1.14) < 0.15, str(c2["summary"]["depMed"]))
+    check("field = the one AI can car", blk["field"]["cars"] == 1
+          and blk["field"]["depMed"] == c2["summary"]["depMed"], str(blk["field"]))
+    check("native car: soc only", blk["cars"][1]["profile"] == "native"
+          and blk["cars"][1]["kw"] is None and blk["cars"][1]["summary"]["depMed"] is None
+          and blk["cars"][1]["summary"]["socLineMed"] is not None)
+    check("absent car: profile none", blk["cars"][3]["profile"] == "none")
+    kw0 = c0["kw"]
+    straight = [v for v in kw0[12:36] if v is not None]   # spline 6-18 %: 350 kW deploy
+    corner = [v for v in kw0[58:76] if v is not None]     # spline 29-38 %: -300 kW harvest
+    coast = [v for v in kw0[80:96] if v is not None]      # spline 40-48 %: nothing
+    check("profile: deploy on the straight", len(straight) >= 20 and min(straight) >= 340,
+          str(straight[:5]))
+    check("profile: harvest in the corner", len(corner) >= 14 and max(corner) <= -290,
+          str(corner[:5]))
+    check("profile: coasting = 0", len(coast) >= 12 and max(abs(v) for v in coast) < 1,
+          str(coast[:5]))
+    ai = blk["aiProfile"]
+    check("AI pooled profile = 200 kW deploy", ai is not None and ai["cars"] == 1
+          and all(v is not None and abs(v - 200) < 1 for v in ai["kw"][8:22]),
+          str(ai and ai["kw"][8:22]))
+    zk = sorted(z["k"] for z in blk["zones"])
+    check("zones: sm + ot + prd", zk == ["ot", "prd", "sm"], str(zk))
+    check("SM opens once per lap", all(l["smN"] == 1 for l in c0["laps"]),
+          str([l["smN"] for l in c0["laps"]]))
+    check("OT used on lap 2 by car 2 only",
+          [l["otN"] for l in c2["laps"]][:3] == [0, 1, 0] and all(l["otN"] == 0 for l in c0["laps"]),
+          str([l["otN"] for l in c2["laps"]]))
+    check("lap budgets: deploy s, SM s = zone length",
+          c0["laps"][0]["deployS"] > 5 and abs(c0["laps"][0]["smS"] - 0.2 * L / 50.0) < 0.3,
+          str(c0["laps"][0]))
+    digest = energy.season_summary(blk)
+    check("season digest", digest["aiDep"] == c2["summary"]["depMed"]
+          and digest["plDep"] == c0["summary"]["depMed"], str(digest))
+    payload2, rep_bin2 = report_html.build_payload(rd2, an2, tm)
+    check("energy block in payload", payload2["energy"] is not None
+          and len(payload2["energy"]["events"]) == n_ev)
+    out2 = os.path.join(tmp, "out_s2.report.html")
+    report_html.render(payload2, rep_bin2, template, out2)
+    html2 = open(out2, "r", encoding="utf-8").read()
+    check("energy tab + data rendered", 'id="tab-energy"' in html2
+          and '"aiProfile":{' in html2 and '"hasCan":true' in html2)
+    json_ok = True
+    try:
+        json.loads(html2.split("const DATA = ", 1)[1].split(";\nconst REPLAY_B64", 1)[0])
+    except Exception:
+        json_ok = False
+    check("payload json round-trips", json_ok)
+    check("blocked deploy requests measured (AI ~44 %, player 0 %)",
+          c2["summary"]["blockedPct"] is not None and 0.3 < c2["summary"]["blockedPct"] < 0.6
+          and c0["summary"]["blockedPct"] == 0.0
+          and abs(blk["field"]["blockedPct"] - c2["summary"]["blockedPct"]) < 1e-3,
+          f"ai={c2['summary']['blockedPct']} player={c0['summary']['blockedPct']}")
+
+    print("replay binary: energy fields")
+    check("replay stride 40 (both schemas)",
+          payload2["replay"]["stride"] == 40 and payload["replay"]["stride"] == 40)
+    n2, dt2 = payload2["replay"]["n"], payload2["replay"]["dt"]
+    k5 = int(round(5.0 / dt2))   # t = 5 s: car 0 at 17 % of lap 1 -> 350 kW, SM wing open
+    ek, es, ef, el = struct.unpack_from("<hHBB", rep_bin2, (0 * n2 + k5) * 40 + 32)
+    check("replay sample car 0: +350 kW, soc, SM open, valid bits",
+          ek == 3500 and 0 < es <= 10000 and (ef & 64) and (ef & 128) and (ef & 1) and el == 4,
+          f"kw={ek} soc={es} ef={ef} latch={el}")
+    ek1, es1, ef1, el1 = struct.unpack_from("<hHBB", rep_bin2, (1 * n2 + k5) * 40 + 32)
+    check("replay sample native car: soc only",
+          ek1 == 0 and (ef1 & 128) and not (ef1 & 64) and el1 == 255,
+          f"kw={ek1} soc={es1} ef={ef1} latch={el1}")
+    k12 = int(round(9.5 / dt2))   # t = 9.5 s: car 0 at 33 % (first corner) -> harvesting -300 kW
+    ekh = struct.unpack_from("<h", rep_bin2, (0 * n2 + k12) * 40 + 32)[0]
+    check("replay sample car 0: -300 kW while harvesting", ekh == -3000, str(ekh))
+    ef_s1 = struct.unpack_from("<B", rep_bin, (0 * payload["replay"]["n"] + k5) * 40 + 36)[0]
+    check("schema-1 replay: energy flags clear", ef_s1 == 0, str(ef_s1))
+
+    print("energy_compare (A/B arms)")
+    EN_PEAK[2] = 300.0            # arm B: the AI deploys at 300 kW instead of 200
+    text_b = build_log(schema=2)
+    EN_PEAK[2] = 200.0
+    log_b = os.path.join(tmp, "vrclog_test_race_s2_armB.txt")
+    with open(log_b, "w", encoding="utf-8") as f:
+        f.write(text_b)
+    arms = energy_compare.load_arms([log2, log_b], ["A", "B"])
+    res = energy_compare.compare(arms)
+    dep = next(m for m in res["metrics"] if m["key"] == "dep")
+    check("arm B deploys ~1.5x more", dep["raw"][0] is not None and dep["raw"][1] is not None
+          and 1.3 < dep["raw"][1] / dep["raw"][0] < 1.7, str(dep["raw"]))
+    check("delta column signed", dep["deltas"][1].startswith("+"), str(dep["deltas"]))
+    kwm = next(m for m in res["metrics"] if m["key"] == "kwMax")
+    check("peak kW 200 -> 300", kwm["raw"] == [200.0, 300.0], str(kwm["raw"]))
+    zrow = next(z for z in res["zones"] if z["zone"].startswith("ZONE_0"))
+    check("zone breakdown: AI deploys inside the SM zone",
+          zrow["kw"][0] is not None and 50 < zrow["kw"][0] < 90 and 0.3 <= zrow["share"][0] <= 0.4,
+          str(zrow))
+    md = energy_compare.to_markdown(res)
+    html_c = os.path.join(tmp, "compare.html")
+    energy_compare.write_html(res, arms, html_c)
+    check("markdown + html written", "AI deploy MJ/lap" in md and os.path.getsize(html_c) > 10_000
+          and "<canvas" in open(html_c, encoding="utf-8").read())
+
+    print("corner reuse across layouts")
+    fake_root = os.path.join(tmp, "acroot")
+    for lay, data in (("gp", None), ("f12026", None), ("other", b"different line")):
+        d = os.path.join(fake_root, "content", "tracks", "stadium", lay, "ai")
+        os.makedirs(d)
+        if data is None:
+            shutil.copy(ai_path, os.path.join(d, "fast_lane.ai"))
+        else:
+            with open(os.path.join(d, "fast_lane.ai"), "wb") as f:
+                f.write(data)
+    cdir = os.path.join(tmp, "corners")
+    os.makedirs(cdir)
+    for lay in ("gp", "other"):
+        with open(os.path.join(cdir, f"stadium-{lay}.json"), "w", encoding="utf-8") as f:
+            json.dump({"track": f"stadium/{lay}", "corners": []}, f)
+    ai26 = os.path.join(fake_root, "content", "tracks", "stadium", "f12026", "ai", "fast_lane.ai")
+    check("identical AI line -> curated corners reused",
+          track_model.sibling_corners({"trackFull": "stadium/f12026"}, ai26, cdir, fake_root)
+          == os.path.join(cdir, "stadium-gp.json"))
+    ai_o = os.path.join(fake_root, "content", "tracks", "stadium", "other", "ai", "fast_lane.ai")
+    check("different AI line -> no reuse",
+          track_model.sibling_corners({"trackFull": "stadium/other"}, ai_o, cdir, fake_root) is None)
 
     print()
     if FAILS:

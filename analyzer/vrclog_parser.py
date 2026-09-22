@@ -1,11 +1,14 @@
-"""vrclog_parser — schema-1 VRC Race Logger txt -> numpy RaceData.
+"""vrclog_parser — schema-1 / schema-2 VRC Race Logger txt -> numpy RaceData.
 
-Parsing contract: knowledge_base\\vrc_race_logger_format_spec.md (keep in lockstep).
+Parsing contract: docs/log_format_spec.md (keep in lockstep).
 Known schema-1 quirks handled here:
   * LAP valid/cuts are a race-session artifact -> parsed but flagged unreliable.
   * V1.0 files: raw=0 COLL flood from floor scrapes -> classified (impact vs scrape)
     downstream in detectors, parser keeps everything.
   * Salvaged files may lack a proper END line; .parts dirs are accepted as input.
+Schema 2 (logger V1.4) adds the energy telemetry: per-car E stream (change-only, so
+readers hold the last value), DEPLOY/HARVEST/SM/OT events, ELAP per-lap summaries, and
+the ZONES / ENERGY header lines. Schema-1 logs simply have none of it (rd.E empty).
 """
 from __future__ import annotations
 
@@ -27,10 +30,18 @@ S_FIELDS = ("t", "fuel", "tc0", "tc1", "tc2", "tc3", "pr0", "pr1", "pr2", "pr3",
             "dmg4", "engine_life", "gearbox_dmg", "race_pos", "lap", "flags",
             "kers", "flat_max", "sd0", "sd1", "sd2", "sd3", "compound")
 W_FIELDS = ("t", "air", "road", "grip", "rain", "wet", "wind_kmh", "wind_dir", "flag")
+# schema 2 E stream; blank fields (native-only cars) -> NaN for floats, -1 for ints
+E_FIELDS = ("t", "kw", "soc", "dep_mj", "reg_mj", "kin", "regen", "max_kw", "max_kw_lim",
+            "strat", "split", "latch", "pu_mode", "flags")
+E_INT_FIELDS = frozenset(("strat", "split", "latch", "pu_mode", "flags"))
 
 # S.flags bitmask
 FLAG_PITLANE, FLAG_PITBOX, FLAG_RETIRED, FLAG_FINISHED = 1, 2, 4, 8
 FLAG_AI_PITTING, FLAG_AI_RAIN, FLAG_DRS_AVAIL, FLAG_DRS_ACTIVE = 16, 32, 64, 128
+# E.flags bitmask (schema 2)
+EFLAG_BOOST, EFLAG_ANTI, EFLAG_OT_ACTIVE, EFLAG_OT_PENDING = 1, 2, 4, 8
+EFLAG_PLIM, EFLAG_PLIM_PENDING, EFLAG_CHARGING, EFLAG_SM_OPEN = 16, 32, 64, 128
+ENERGY_EVENT_TYPES = frozenset(("DEPLOY", "HARVEST", "SM", "OT"))
 
 
 class RaceData:
@@ -52,6 +63,12 @@ class RaceData:
         self.end = {}               # END json (may be missing on salvaged tails)
         self.duration = 0.0         # seconds, last seen t
         self.start = None           # V1.3+ race start: {green_t, moving, launch:{car:{...}}}
+        # schema 2 (logger V1.4) energy telemetry; all empty/None on schema-1 logs
+        self.E = []                 # per car: {field: np.ndarray} change-only samples, t in s
+        self.energy_cars = []       # per car: True when the E stream carries CAN kW data
+        self.ev_elap = []           # per-lap energy summaries (dicts, None for blanks)
+        self.zones = None           # ZONES header json (layout drs_zones.ini) or None
+        self.energy_src = {}        # ENERGY header lines keyed by car ID
 
     # -- convenience -------------------------------------------------------------
     def driver(self, i):
@@ -89,9 +106,14 @@ def parse(path):
 
     f_cols = [None]   # per car -> list of row-lists (grown on demand)
     s_cols = [None]
+    e_cols = [None]
     w_rows = []
     coll_rows = []
     bad_lines = 0
+    nan = float("nan")
+
+    def opt(v):
+        return float(v) if v != "" else None
 
     def car_bucket(store, ci):
         while len(store) <= ci:
@@ -116,6 +138,11 @@ def parse(path):
                 ci = int(p[2])
                 row = [float(p[1])] + [float(v) for v in p[3:33]]
                 car_bucket(s_cols, ci).append(row)
+            elif kind == "E":
+                p = line.split(",")
+                ci = int(p[2])
+                row = [float(p[1])] + [float(v) if v != "" else nan for v in p[3:16]]
+                car_bucket(e_cols, ci).append(row)
             elif kind == "W":
                 p = line.split(",")
                 w_rows.append([float(v) for v in p[1:10]])
@@ -148,8 +175,25 @@ def parse(path):
                 elif et == "LAUNCH":  # V1.3+: kind 0 = first throttle, 1 = first movement
                     rd.events.append({"t": t, "type": "LAUNCH", "car": int(p[3]),
                                       "kind": int(p[4]), "delta_ms": int(p[5])})
+                elif et in ENERGY_EVENT_TYPES:  # schema 2: state samples of the energy FSMs
+                    rd.events.append({"t": t, "type": et, "car": int(p[3]), "state": int(p[4]),
+                                      "spline": float(p[5]), "speed": float(p[6]),
+                                      "soc": float(p[7]), "kw": float(p[8])})
+                elif et == "ELAP":    # schema 2: per-lap energy summary (blanks = native car)
+                    rd.ev_elap.append({
+                        "t": t, "car": int(p[3]), "lap_n": int(p[4]),
+                        "dep_mj": opt(p[5]), "reg_mj": opt(p[6]),
+                        "soc_line": opt(p[7]), "soc_min": opt(p[8]), "soc_max": opt(p[9]),
+                        "deploy_ms": opt(p[10]), "harvest_ms": opt(p[11]), "sm_ms": opt(p[12]),
+                        "ot_ms": opt(p[13]), "plim_ms": opt(p[14]),
+                    })
                 else:
                     rd.events.append({"t": t, "type": et, "raw": p[3:]})
+            elif kind == "ZONES":
+                rd.zones = json.loads(line[6:])
+            elif kind == "ENERGY":
+                d = json.loads(line[7:])
+                rd.energy_src[d.get("car", "")] = d
             elif kind == "META":
                 rd.meta = json.loads(line[5:])
             elif kind == "CAR":
@@ -171,8 +215,8 @@ def parse(path):
         except Exception:
             bad_lines += 1  # tolerate torn tails (crash chunks)
 
-    if rd.schema != 1:
-        raise ValueError(f"unsupported schema {rd.schema} (expected 1)")
+    if rd.schema not in (1, 2):
+        raise ValueError(f"unsupported schema {rd.schema} (expected 1 or 2)")
     rd.n_cars = rd.meta.get("cars", len(rd.cars))
     rd.bad_lines = bad_lines
 
@@ -194,9 +238,26 @@ def parse(path):
                 d[k] = col.astype(np.float32)
         return d
 
+    def pack_e(rows):
+        if not rows:
+            return {k: np.zeros(0, dtype=np.float32) for k in E_FIELDS}
+        a = np.asarray(rows, dtype=np.float64)
+        d = {}
+        for j, k in enumerate(E_FIELDS):
+            col = a[:, j]
+            if k == "t":
+                d[k] = col / 1000.0
+            elif k in E_INT_FIELDS:
+                d[k] = np.where(np.isnan(col), -1, col).astype(np.int32)
+            else:
+                d[k] = col.astype(np.float32)
+        return d
+
     for ci in range(rd.n_cars):
         rd.F.append(pack(f_cols[ci] if ci < len(f_cols) else None, F_FIELDS))
         rd.S.append(pack(s_cols[ci] if ci < len(s_cols) else None, S_FIELDS))
+        rd.E.append(pack_e(e_cols[ci] if ci < len(e_cols) else None))
+        rd.energy_cars.append(bool(len(rd.E[ci]["t"]) and np.isfinite(rd.E[ci]["kw"]).any()))
     rd.W = pack(w_rows, W_FIELDS)
 
     if coll_rows:
@@ -314,6 +375,12 @@ def summary(rd):
     ec = rd.ev_coll
     lines.append(f"  COLL={len(ec['t'])} (car-car={int((ec['raw'] > 0).sum())}) "
                  f"LAP={len(rd.ev_lap)} other EV={len(rd.events)} W={len(rd.W['t'])}")
+    if rd.schema >= 2:
+        n_e = sum(len(e["t"]) for e in rd.E)
+        n_ev = sum(1 for e in rd.events if e["type"] in ENERGY_EVENT_TYPES)
+        lines.append(f"  ENERGY: E={n_e} lines, can cars={sum(rd.energy_cars)}/{rd.n_cars}, "
+                     f"energy EV={n_ev}, ELAP={len(rd.ev_elap)}, "
+                     f"zones={'yes' if rd.zones and rd.zones.get('exists') else 'no'}")
     if rd.start:
         reacts = sorted((v["react_ms"], c) for c, v in rd.start["launch"].items()
                         if v["react_ms"] is not None)

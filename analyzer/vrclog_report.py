@@ -42,12 +42,22 @@ def prepare_track(rd, ai_path=None, corners_path=None, ac_root=AC_ROOT_DEFAULT,
     tm, med = track_model.pick_z_sign(tm, rd)
     corners = corners_path or os.path.join(
         HERE, "corners", rd.meta.get("trackFull", "").replace("/", "-") + ".json")
+    reused = None
+    if not corners_path and not os.path.isfile(corners):
+        # another layout of this track with a byte-identical AI line (e.g. the 2026
+        # zone-only layouts) -> reuse its curated corner names
+        reused = track_model.sibling_corners(rd.meta, ai_path, os.path.join(HERE, "corners"),
+                                             ac_root)
+        if reused:
+            corners = reused
     if os.path.isfile(corners):
         tm.load_corners(corners)
         if verbose:
             print(f"[2/5] track model: {tm.total:.0f} m, {len(tm.corners)} named corners "
                   f"(on-line check {med:.2f} m)"
-                  + ("" if tm.sides_ok else " — payload sides broken, constant width"))
+                  + ("" if tm.sides_ok else " — payload sides broken, constant width")
+                  + (f" — corners reused from {os.path.basename(reused)} (identical AI line)"
+                     if reused else ""))
     else:
         # first time on this track: auto-detect corners, number them sequentially,
         # and write an editable skeleton next to the tool (edit n/name, re-run)

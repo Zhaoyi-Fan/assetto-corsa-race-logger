@@ -100,6 +100,9 @@ tr.csx>td{background:var(--bg2); border:1px solid var(--line); padding:12px 14px
 .cstbl{font-size:.8rem; width:100%}
 .cstbl td,.cstbl th{padding:3px 8px}
 .cstbl tr.cssel td{color:var(--fg); font-weight:600}
+#entable td,#enlaps td{font-variant-numeric:tabular-nums; white-space:nowrap}
+#entable tr.ensel td{color:var(--fg); font-weight:600}
+#entable tr.enfield td{color:var(--dim); border-top:2px solid var(--line)}
 .csdot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px}
 #cschart{width:100%; margin-top:4px}
 @media (max-width:900px){ .grid2{grid-template-columns:1fr} #replaywrap{grid-template-columns:1fr} }
@@ -118,6 +121,7 @@ tr.csx>td{background:var(--bg2); border:1px solid var(--line); padding:12px 14px
   <button data-tab="driving" data-i18n="tabDriving"></button>
   <button data-tab="timeline" data-i18n="tabTimeline"></button>
   <button data-tab="cards" data-i18n="tabCards"></button>
+  <button data-tab="energy" data-i18n="tabEnergy" id="energytab"></button>
   <button data-tab="replay" data-i18n="tabReplay"></button>
 </nav>
 <main>
@@ -184,6 +188,19 @@ tr.csx>td{background:var(--bg2); border:1px solid var(--line); padding:12px 14px
     <table id="alleps"></table>
   </section>
 
+  <section id="tab-energy">
+    <h2><span data-i18n="enH"></span> <span class="hint" data-i18n="enHint"></span></h2>
+    <div class="chips" id="enchips"></div>
+    <table id="entable" style="margin-top:8px"></table>
+    <h2><span data-i18n="enProfH"></span> <span class="hint" id="enprofdrv"></span></h2>
+    <div class="panelbox"><canvas id="enprof" height="300"></canvas>
+      <div class="hint" data-i18n="enProfLegend"></div></div>
+    <h2><span data-i18n="enLapsH"></span> <span class="hint" id="enlapsdrv"></span></h2>
+    <table id="enlaps"></table>
+    <h2><span data-i18n="enTlH"></span> <span class="hint" data-i18n="enTlHint"></span></h2>
+    <div class="panelbox"><canvas id="entl"></canvas></div>
+  </section>
+
   <section id="tab-replay">
     <div id="replaywrap">
       <div>
@@ -197,6 +214,7 @@ tr.csx>td{background:var(--bg2); border:1px solid var(--line); padding:12px 14px
         <canvas id="scrub"></canvas>
         <canvas id="ribbon"></canvas>
         <div class="hint" data-i18n="replayHint"></div>
+        <div class="hint" id="replayenergy" data-i18n="replayEnergy"></div>
       </div>
       <div id="sidebar">
         <div class="panelbox" id="leader"><h2 style="margin-top:0" data-i18n="leaderH"></h2><table></table></div>
@@ -275,6 +293,21 @@ const I18N = {
     tCol:"t", lapColS:"圈", sevCol:"严重度", titleCol:"标题", involvedCol:"涉及",
     wxLabel:"抓地 {g0}–{g1}% · 雨 {r}",
     seasonBtn:"← 赛季",
+    tabEnergy:"能量",
+    enH:"混动能量部署（每车）", enHint:"点击一行选中车手 · ★ = 玩家 · 数值 = 每圈中位数",
+    enDriver:"车手", enLaps:"圈", enDep:"部署 MJ/圈", enReg:"回收 MJ/圈", enSocLine:"过线 SoC",
+    enSocMin:"最低 SoC", enSocMax:"最高 SoC", enDrift:"SoC 漂移", enKw:"峰值 kW", enSm:"SM 次/圈 · s",
+    enOt:"OT 次", enPlim:"受限 s/圈", enVmax:"Vmax", enStrat:"STRAT",
+    enField:"AI 中位（{n} 车）", enNative:"只有原生字段（这辆车不发布 CAN 通道）", enNativeShort:"原生",
+    enProfH:"沿圈功率剖面", enProfLegend:"实线 = 选中车手 kW 中位（正 = 部署，负 = 回收）· 虚线 = AI 合并中位 · 细线 = SoC（右轴）· 绿带 = 直道模式区 · 红带 = 功率削减区 · 蓝带 = 功率重置区 · 橙带 = 备用功率曲线区 · 紫线 = 超车模式检测线（虚）/起点（实）· 青带 = DRS 区（旧规）· 底部 = 弯角编号",
+    enLapsH:"每圈能量", enLap:"圈", enDeployS:"部署 s", enHarvestS:"回收 s", enSmN:"SM 次", enSmS:"SM s",
+    enOtS:"OT s", enPlimS:"受限 s", enNoLaps:"没有完整圈",
+    enTlH:"能量事件时间轴", enTlHint:"每行一车 · 蓝 = 部署 · 绿 = 回收 · 黄（上）= SM 翼片开 · 紫（下）= 超车模式 · 点击跳回放",
+    enNone:"本日志没有能量数据（需要 logger V1.4+）",
+    enBlocked:"请求被挡", enBlockedHint:"部署请求（kersInput ≥ 0.5）中功率上限被压到 0 的比例",
+    ersSoc:"电量", ersSm:"SM 翼片开", ersArmed:"SM 待命", ersOt:"超车模式", ersOtPend:"超车待命", ersLim:"受限",
+    ersHint:"MGU-K：蓝 = 部署 · 绿 = 回收 · 橙 = 电量",
+    replayEnergy:"光晕 = 部署/回收 · 黄圈 = SM 翼片开 · 紫圈 = 超车模式 · 彩带橙线 = 电量",
   },
   en: {
     tabOverview:"Overview", tabLaps:"Lap times", tabDriving:"Driving", tabTimeline:"Timeline", tabCards:"Incidents", tabReplay:"Replay",
@@ -330,6 +363,21 @@ const I18N = {
     tCol:"t", lapColS:"Lap", sevCol:"Sev", titleCol:"Title", involvedCol:"Involved",
     wxLabel:"grip {g0}–{g1}% · rain {r}",
     seasonBtn:"← Season",
+    tabEnergy:"Energy",
+    enH:"Hybrid energy deployment (per car)", enHint:"click a row to select a driver · ★ = player · values = per-lap medians",
+    enDriver:"Driver", enLaps:"Laps", enDep:"Deploy MJ/lap", enReg:"Harvest MJ/lap", enSocLine:"SoC at line",
+    enSocMin:"Min SoC", enSocMax:"Max SoC", enDrift:"SoC drift", enKw:"Peak kW", enSm:"SM opens/lap · s",
+    enOt:"OT uses", enPlim:"Limited s/lap", enVmax:"Vmax", enStrat:"STRAT",
+    enField:"AI median ({n} cars)", enNative:"native fields only (this car publishes no CAN channels)", enNativeShort:"native",
+    enProfH:"Power along the lap", enProfLegend:"solid = selected driver's median kW (+ deploy, − harvest) · dashed = pooled AI median · thin = SoC (right axis) · green bands = straight-mode zones · red = power-reduction zones · blue = power-reset zones · orange = alternative power curve · purple = overtake detection (dashed) / start (solid) · cyan = DRS zones (older rules) · bottom = corner numbers",
+    enLapsH:"Per-lap energy", enLap:"Lap", enDeployS:"Deploy s", enHarvestS:"Harvest s", enSmN:"SM opens", enSmS:"SM s",
+    enOtS:"OT s", enPlimS:"Limited s", enNoLaps:"no complete laps",
+    enTlH:"Energy event timeline", enTlHint:"one row per car · blue = deploying · green = harvesting · yellow (top) = SM wing open · purple (bottom) = overtake mode · click to replay",
+    enNone:"no energy data in this log (needs logger V1.4+)",
+    enBlocked:"Blocked req.", enBlockedHint:"share of deploy requests (kersInput ≥ 0.5) met with a power cap of 0",
+    ersSoc:"SoC", ersSm:"SM open", ersArmed:"SM armed", ersOt:"Overtake", ersOtPend:"OT pending", ersLim:"limited",
+    ersHint:"MGU-K: blue = deploy · green = harvest · orange = battery",
+    replayEnergy:"glow = deploy/harvest · yellow ring = SM wing open · purple ring = overtake · orange line in the ribbon = battery",
   },
 };
 function T(key, vars){
@@ -388,7 +436,14 @@ const chan = {
   beta: (ci,k) => DV.getInt16(off(ci,k)+24, true) / 10,
   accX: (ci,k) => DV.getInt16(off(ci,k)+28, true) / 100,
   accZ: (ci,k) => DV.getInt16(off(ci,k)+30, true) / 100,
+  // schema-2 energy (stride >= 40): kW (+ deploy / − harvest), battery 0..1, flag bits
+  // 1 SM open · 2 SM armed · 4 OT active · 8 OT pending · 16 limited · 32 boost · 64 kW valid · 128 SoC valid
+  kw: (ci,k) => DV.getInt16(off(ci,k)+32, true) / 10,
+  soc: (ci,k) => DV.getUint16(off(ci,k)+34, true) / 10000,
+  eflags: (ci,k) => DV.getUint8(off(ci,k)+36),
+  latch: (ci,k) => DV.getUint8(off(ci,k)+37),
 };
+const HAS_E = STRIDE >= 40 && !!DATA.energy;
 const SURF_ZH = {0:"沥青",1:"人工草",2:"草地",3:"砾石",4:"路肩",5:"旧沥青",6:"沙地",7:"冰",8:"雪"};
 const SURF_EN = {0:"asphalt",1:"turf",2:"grass",3:"gravel",4:"kerb",5:"old",6:"sand",7:"ice",8:"snow"};
 const surfName = t => (LANG === "zh" ? SURF_ZH : SURF_EN)[t] || "?";
@@ -452,6 +507,7 @@ function showTab(name){
   if (name === "cards") drawSparks();
   if (name === "laps") drawLapsTab();
   if (name === "driving") renderDriving();
+  if (name === "energy") buildEnergy();
 }
 tabs.forEach(b => b.onclick = () => { showTab(b.dataset.tab); });
 window.addEventListener("hashchange", applyHash);
@@ -1369,6 +1425,7 @@ function drawMap(){
     c.scale(devicePixelRatio, devicePixelRatio);
   }
   const trailS = 2.6, steps = 14;
+  const kE = HAS_E ? Math.floor(idxAt(simT)) : -1;
   for (let ci = 0; ci < CARS; ci++){
     const dnfed = dnfT[ci] !== undefined && simT > dnfT[ci] + 2;
     const st = carState(ci, simT);
@@ -1382,6 +1439,16 @@ function drawMap(){
         c.beginPath(); c.moveTo(W2SX(a.x), W2SY(a.z)); c.lineTo(W2SX(b.x), W2SY(b.z)); c.stroke();
       }
     }
+    // energy state (schema 2): glow = deploying (blue) / harvesting (green) behind the dot,
+    // yellow ring = straight-mode wing open, purple ring = overtake mode active
+    const ef = (kE >= 0 && !dnfed) ? chan.eflags(ci, kE) : 0;
+    if (ef & 64){
+      const kw = chan.kw(ci, kE);
+      if (kw >= 10 || kw <= -10){
+        c.fillStyle = kw > 0 ? "#3b7ddd66" : "#39c07a66";
+        c.beginPath(); c.arc(x, y, 9 + Math.min(5, Math.abs(kw) / 70), 0, 7); c.fill();
+      }
+    }
     c.globalAlpha = dnfed ? 0.25 : 1;
     c.fillStyle = carOf(ci).color;
     c.beginPath(); c.arc(x, y, ci === 0 ? 6 : 5, 0, 7); c.fill();
@@ -1392,6 +1459,9 @@ function drawMap(){
       c.lineTo(x + 5*Math.sin(st.hd - 2.2), y + 5*Math.cos(st.hd - 2.2));
       c.closePath(); c.fill();
     }
+    if (ef & 1){ c.strokeStyle = "#f2a93b"; c.lineWidth = 1.6; c.beginPath(); c.arc(x, y, 8.5, 0, 7); c.stroke(); }
+    if (ef & 4){ c.strokeStyle = "#b06ef2"; c.lineWidth = 1.6; c.beginPath(); c.arc(x, y, 11.5, 0, 7); c.stroke(); }
+    c.lineWidth = 1;
     if (ci === selected || follow === ci || view.s > 1.1){
       c.fillStyle = "#e8ebf0"; c.font = "10px sans-serif";
       c.fillText(shortName(ci), x + 8, y - 7);
@@ -1560,6 +1630,20 @@ function buildRibbon(){
     c.fillStyle = "#39c07a"; c.fillRect(px, mid - g*19, 1, g*19);
     c.fillStyle = "#e8433f"; c.fillRect(px, mid, 1, b*19);
   }
+  if (HAS_E){   // battery trajectory (orange line) + straight-mode wing open ticks (top edge)
+    for (let px = 0; px < ribbonW; px++){
+      const kA = Math.floor(px / ribbonW * (N-1));
+      const kB = Math.min(N-1, Math.floor((px+1) / ribbonW * (N-1)));
+      let sm = false, soc = null;
+      for (let k = kA; k <= kB; k++){
+        const ef = chan.eflags(ribbonCar, k);
+        if (ef & 1) sm = true;
+        if (ef & 128) soc = chan.soc(ribbonCar, k);
+      }
+      if (sm){ c.fillStyle = "#f2a93b"; c.fillRect(px, 0, 1, 3); }
+      if (soc !== null){ c.fillStyle = "#f2a93bdd"; c.fillRect(px, 42 - soc * 38, 1, 1.5); }
+    }
+  }
   c.fillStyle = "#9aa3b2"; c.font = "9px sans-serif";
   c.fillText(shortName(ribbonCar), 4, 10);
 }
@@ -1620,6 +1704,8 @@ function drawTelStrip(){
     c.stroke();
   };
   path(k => 32 - chan.steer(ci, k) / 180 * 26, "#8b93a2", 1);          // steer, centered
+  if (HAS_E)                                                            // MGU-K kW, centered (+ up)
+    path(k => 32 - ((chan.eflags(ci, k) & 64) ? Math.max(-350, Math.min(350, chan.kw(ci, k))) : 0) / 350 * 28, "#3b7ddd", 1.2);
   path(k => 60 - chan.gas(ci, k) * 56, "#39c07a", 1.5);                 // throttle
   path(k => 60 - chan.brake(ci, k) * 56, "#e8433f", 1.5);               // brake
   c.strokeStyle = "#e8ebf055";
@@ -1671,9 +1757,16 @@ function updatePanels(){
         if (dp > 1) gap = T("lapsPlus", {n: Math.floor(dp)});
       }
       const inPit = DATA.pits.some(p => p.car === r.ci && simT >= p.t0 - 6 && simT <= p.t1 + 6);
+      let socTd = "";
+      if (HAS_E){
+        const ef = chan.eflags(r.ci, k);
+        const soc = (ef & 128) ? chan.soc(r.ci, k) : null;
+        const col = soc === null ? "var(--dim)" : soc < 0.3 ? "var(--bad)" : soc < 0.6 ? "var(--warn)" : "#f2a93b";
+        socTd = `<td style="color:${col};text-align:right;font-variant-numeric:tabular-nums">${soc === null ? "" : Math.round(soc * 100) + "%"}${(ef & 1) ? ' <span style="color:#f2a93b">▲</span>' : ""}</td>`;
+      }
       return `<tr style="${r.ci === selected ? "background:#232a3a" : ""}" onclick="selCar(${r.ci})">
         <td>${i+1}</td><td><span class="dot" style="background:${carOf(r.ci).color}"></span>${esc(nameOf(r.ci).slice(0,16))}</td>
-        <td style="color:var(--dim)">${inPit && !r.dnf ? "PIT" : gap}</td></tr>`;
+        <td style="color:var(--dim)">${inPit && !r.dnf ? "PIT" : gap}</td>${socTd}</tr>`;
     }).join("");
   }
   // telemetry text at ~10 Hz (a full innerHTML rewrite every frame churns layout
@@ -1696,6 +1789,33 @@ function updatePanels(){
   }).join("");
   const gtxt = gear === 0 ? "N" : gear === -1 ? "R" : gear;
   const gearHtml = LANG === "zh" ? `<b>${gtxt}</b> 挡` : `gear <b>${gtxt}</b>`;
+  // hybrid energy block (schema-2 logs): MGU-K power bar centred on zero, battery bar, mode tags
+  let ersHtml = "";
+  if (HAS_E){
+    const ef = chan.eflags(ci, k);
+    if (ef & 128){
+      const kw = (ef & 64) ? chan.kw(ci, k) : null, soc = chan.soc(ci, k);
+      const tags = [];
+      if (ef & 1) tags.push(`<span style="color:#f2a93b">▲ ${T("ersSm")}</span>`);
+      else if (ef & 2) tags.push(`<span style="color:#f2a93b99">${T("ersArmed")}</span>`);
+      if (ef & 4) tags.push(`<span style="color:#b06ef2">${T("ersOt")}</span>`);
+      else if (ef & 8) tags.push(`<span style="color:#b06ef299">${T("ersOtPend")}</span>`);
+      if (ef & 16) tags.push(`<span style="color:var(--dim)">${T("ersLim")}</span>`);
+      if (ef & 32) tags.push(`<span style="color:#4fd1e0">boost</span>`);
+      const kwTxt = kw === null ? "—" : (kw >= 0 ? "+" : "") + kw.toFixed(0) + " kW";
+      const kwCol = kw === null ? "var(--dim)" : kw >= 10 ? "#3b7ddd" : kw <= -10 ? "#39c07a" : "var(--fg)";
+      const half = kw === null ? 0 : Math.min(50, Math.abs(kw) / 350 * 50);
+      const barL = (kw !== null && kw < 0) ? 50 - half : 50;
+      ersHtml = `
+    <div style="margin-top:7px;font-size:.8rem"><b style="color:${kwCol}">${kwTxt}</b>
+      <span class="hint" style="margin-left:6px">${T("ersSoc")} <b style="color:var(--fg)">${(soc*100).toFixed(0)}%</b></span>
+      ${tags.length ? `<span style="margin-left:6px;font-size:.75rem">${tags.join(" · ")}</span>` : ""}</div>
+    <div class="bar" style="position:relative"><i style="margin-left:${barL}%;width:${half}%;background:${(kw !== null && kw < 0) ? "#39c07a" : "#3b7ddd"}"></i>
+      <span style="position:absolute;left:50%;top:0;width:1px;height:100%;background:#6b7482"></span></div>
+    <div class="bar"><i style="width:${soc*100}%;background:#f2a93b"></i></div>
+    <div class="hint">${T("ersHint")}</div>`;
+    }
+  }
   document.getElementById("telbody").innerHTML = `
     <div style="margin-bottom:4px"><span class="dot" style="background:${carOf(ci).color}"></span>
       <b>${esc(nameOf(ci))}</b> <span class="hint">${carOf(ci).ai ? "AI" : T("player")}</span></div>
@@ -1704,7 +1824,7 @@ function updatePanels(){
     ${out ? `　<span style="color:var(--warn)">${T("wheelsOut", {n: out})}</span>` : ""}
     <div class="bar"><i style="width:${chan.gas(ci,k)*100}%;background:var(--ok)"></i></div>
     <div class="bar"><i style="width:${chan.brake(ci,k)*100}%;background:var(--bad)"></i></div>
-    <div class="hint">${T("pedals")}　${T("steer")} ${chan.steer(ci,k).toFixed(0)}°</div>
+    <div class="hint">${T("pedals")}　${T("steer")} ${chan.steer(ci,k).toFixed(0)}°</div>${ersHtml}
     <div class="ndgrid">${ndHtml}</div>
     <div class="hint" style="margin-top:5px">${T("ndLegend")}</div>`;
 }
@@ -1833,6 +1953,7 @@ function setLang(l){
   if (document.getElementById("tab-timeline").classList.contains("on")) drawTimeline();
   if (document.getElementById("tab-laps").classList.contains("on")) drawLapsTab();
   if (document.getElementById("tab-driving").classList.contains("on")) renderDriving();
+  if (document.getElementById("tab-energy").classList.contains("on")) buildEnergy();
 }
 document.getElementById("langbtn").onclick = () => {
   const l = LANG === "zh" ? "en" : "zh";
@@ -1847,13 +1968,205 @@ window.addEventListener("resize", () => {
   if (document.getElementById("tab-timeline").classList.contains("on")) drawTimeline();
   if (document.getElementById("tab-laps").classList.contains("on")) drawLapsTab();
   if (document.getElementById("tab-driving").classList.contains("on")) renderDriving();
+  if (document.getElementById("tab-energy").classList.contains("on")){ drawEnergyProfile(); drawEnergyTimeline(); }
 });
 
 if (DATA.seasonLink){    // set by --season-link: link back to the season dashboard
   const b = document.getElementById("seasonbtn");
   b.href = DATA.seasonLink; b.hidden = false;
 }
+// ---------- energy tab (report v1.6; logger V1.4 / schema 2 logs only) --------------------
+// DATA.energy: {hasCan, energyHz, cars:[{i, profile, ai, summary, laps, kw[], soc[]}], field,
+//               aiProfile:{kw[], soc[], cars}, zones:[{k, s0, s1, det, sess, ...}],
+//               events:[[t, car, kind, state, spline]]}  kind: 0 DEPLOY 1 HARVEST 2 SM 3 OT
+let enSel = null, enTlRows = [];
+const EN_COLORS = ["#3b7ddd", "#39c07a", "#f2a93b", "#b06ef2"];
+const enF = (v, nd) => (v === null || v === undefined) ? "—" : Number(v).toFixed(nd);
+const enPct = v => (v === null || v === undefined) ? "—" : (v * 100).toFixed(0) + "%";
+const enSigned = v => (v === null || v === undefined) ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(0) + "%";
+function buildEnergy(){
+  const E = DATA.energy;
+  if (!E) return;
+  if (enSel === null || !E.cars[enSel]){
+    const pick = E.cars.find(c => !c.ai && c.profile === "can") || E.cars.find(c => c.profile === "can") || E.cars[0];
+    enSel = pick ? pick.i : 0;
+  }
+  const chips = [];
+  if (!E.hasCan) chips.push(T("enNative"));
+  if (E.energyHz) chips.push(`E ${E.energyHz} Hz`);
+  chips.push(T("enField", {n: E.field.cars}));
+  document.getElementById("enchips").innerHTML = chips.map(c => `<span class="chip">${esc(c)}</span>`).join("");
+  buildEnergyTable(); buildEnergyLaps(); drawEnergyProfile(); drawEnergyTimeline();
+}
+function enSelect(i){
+  enSel = i;
+  buildEnergyTable(); buildEnergyLaps(); drawEnergyProfile();
+}
+function buildEnergyTable(){
+  const E = DATA.energy, tb = document.getElementById("entable");
+  const cols = ["enDriver", "enLaps", "enDep", "enReg", "enSocLine", "enSocMin", "enDrift", "enKw",
+                "enBlocked", "enSm", "enOt", "enPlim", "enVmax", "enStrat"];
+  let h = "<tr>" + cols.map(k => `<th${k === "enBlocked" ? ` title="${esc(T("enBlockedHint"))}"` : ""}>${T(k)}</th>`).join("") + "</tr>";
+  const row = (label, s, i, cls) => `<tr class="${cls}" data-car="${i === undefined ? "" : i}">
+    <td>${label}</td><td>${s.laps === undefined ? "—" : s.laps}</td>
+    <td>${enF(s.depMed, 2)}</td><td>${enF(s.regMed, 2)}</td>
+    <td>${enPct(s.socLineMed)}</td><td>${enPct(s.socMin)}</td><td>${enSigned(s.socDrift)}</td>
+    <td>${enF(s.kwMax, 0)}</td><td>${enPct(s.blockedPct)}</td>
+    <td>${(s.smNMed === null || s.smNMed === undefined) ? "—" : enF(s.smNMed, 1) + " · " + enF(s.smSMed, 1) + " s"}</td>
+    <td>${(s.otN === null || s.otN === undefined) ? "—" : s.otN}</td>
+    <td>${enF(s.plimSMed, 1)}</td><td>${enF(s.vmaxMed, 0)}</td>
+    <td>${(s.strat === null || s.strat === undefined) ? "—" : s.strat}</td></tr>`;
+  const rows = E.cars.slice().sort((a, b) =>
+    ((b.summary.depMed || 0) - (a.summary.depMed || 0)) || (a.i - b.i));
+  for (const c of rows){
+    const car = carOf(c.i);
+    const dot = `<span class="dot" style="background:${car.color}"></span>`;
+    const name = esc(car.driver) + (c.ai ? "" : " ★")
+      + (c.profile !== "can" ? ` <span class="hint">${T("enNativeShort")}</span>` : "");
+    h += row(dot + name, c.summary, c.i, c.i === enSel ? "ensel" : "");
+  }
+  if (E.field.cars) h += row(`<b>${T("enField", {n: E.field.cars})}</b>`, E.field, undefined, "enfield");
+  tb.innerHTML = h;
+  tb.querySelectorAll("tr[data-car]").forEach(tr => {
+    if (tr.dataset.car === "") return;
+    tr.style.cursor = "pointer";
+    tr.onclick = () => enSelect(parseInt(tr.dataset.car));
+  });
+}
+function buildEnergyLaps(){
+  const E = DATA.energy, c = E.cars[enSel], tb = document.getElementById("enlaps");
+  document.getElementById("enlapsdrv").textContent = carOf(enSel).driver;
+  document.getElementById("enprofdrv").textContent = carOf(enSel).driver;
+  const cols = ["enLap", "enDep", "enReg", "enSocLine", "enSocMin", "enSocMax", "enDeployS", "enHarvestS",
+                "enSmN", "enSmS", "enOtS", "enPlimS", "enVmax"];
+  let h = "<tr>" + cols.map(k => `<th>${T(k)}</th>`).join("") + "</tr>";
+  for (const l of c.laps){
+    h += `<tr><td>${l.n}</td><td>${enF(l.dep, 2)}</td><td>${enF(l.reg, 2)}</td>
+      <td>${enPct(l.socLine)}</td><td>${enPct(l.socMin)}</td><td>${enPct(l.socMax)}</td>
+      <td>${enF(l.deployS, 1)}</td><td>${enF(l.harvestS, 1)}</td><td>${l.smN}</td>
+      <td>${enF(l.smS, 1)}</td><td>${enF(l.otS, 1)}</td><td>${enF(l.plimS, 1)}</td><td>${enF(l.vmax, 0)}</td></tr>`;
+  }
+  if (!c.laps.length) h += `<tr><td colspan="13" class="hint">${T("enNoLaps")}</td></tr>`;
+  tb.innerHTML = h;
+}
+function drawEnergyProfile(){
+  const E = DATA.energy, s = drvSize("enprof", 300);
+  if (!s) return;
+  const [c, w, h] = s, car = E.cars[enSel], ai = E.aiProfile, B = E.bins;
+  const L = 40, Rm = 40, top = 12, bot = 26;
+  const X = sp => L + sp * (w - L - Rm);
+  const vals = [].concat(car.kw || [], ai ? ai.kw : []).filter(v => v !== null).map(Math.abs);
+  const KW = Math.max(50, Math.ceil(Math.max(50, ...vals) / 50) * 50);
+  const yK = v => top + (1 - (v + KW) / (2 * KW)) * (h - top - bot);
+  const yS = v => top + (1 - v) * (h - top - bot);
+  const sess = (DATA.meta.session || "race").toUpperCase();
+  const band = (z, col) => {
+    if (z.s0 === null || z.s0 === undefined || z.s1 === null || z.s1 === undefined) return;
+    c.fillStyle = col;
+    if (z.s1 >= z.s0) c.fillRect(X(z.s0), top, Math.max(1, X(z.s1) - X(z.s0)), h - top - bot);
+    else { c.fillRect(X(z.s0), top, X(1) - X(z.s0), h - top - bot); c.fillRect(X(0), top, X(z.s1) - X(0), h - top - bot); }
+  };
+  const vline = (sp, col, dash) => {
+    if (sp === null || sp === undefined) return;
+    c.strokeStyle = col; c.setLineDash(dash ? [3, 3] : []); c.lineWidth = 1;
+    c.beginPath(); c.moveTo(X(sp), top); c.lineTo(X(sp), h - bot); c.stroke(); c.setLineDash([]);
+  };
+  for (const z of E.zones){
+    if (z.sess && z.sess !== "ALL" && z.sess !== sess) continue;
+    if (z.k === "sm") band(z, "rgba(57,192,122,.16)");
+    else if (z.k === "drs"){ band(z, "rgba(79,209,224,.14)"); vline(z.det, "#4fd1e0", true); }
+    else if (z.k === "prd") band(z, "rgba(232,67,63,.14)");
+    else if (z.k === "prs") band(z, "rgba(59,125,221,.14)");
+    else if (z.k === "alt") band(z, "rgba(242,169,59,.10)");
+    else if (z.k === "spd") band(z, "rgba(154,163,178,.08)");
+    else if (z.k === "ot"){ vline(z.det, "#b06ef2", true); vline(z.s0, "#b06ef2", false); }
+  }
+  c.font = "9px sans-serif";
+  for (const v of [-KW, -KW / 2, 0, KW / 2, KW]){
+    c.strokeStyle = v === 0 ? "#3a4252" : "#232a38";
+    c.beginPath(); c.moveTo(L, yK(v)); c.lineTo(w - Rm, yK(v)); c.stroke();
+    c.fillStyle = "#6b7482"; c.fillText((v > 0 ? "+" : "") + v.toFixed(0), 4, yK(v) + 3);
+  }
+  for (const p of [0, 0.5, 1]){ c.fillStyle = "#6b7482"; c.fillText((p * 100).toFixed(0) + "%", w - Rm + 5, yS(p) + 3); }
+  for (const l of (DATA.track && DATA.track.labels) || []){
+    const mid = (l.s0 + l.s1) / 2;
+    c.fillStyle = "#6b7482"; c.fillText(l.n, X(mid) - 4, h - 10);
+    c.strokeStyle = "#232a38"; c.beginPath(); c.moveTo(X(mid), h - bot); c.lineTo(X(mid), h - bot + 4); c.stroke();
+  }
+  c.fillStyle = "#6b7482"; c.fillText("S/F", L - 8, h - 2);
+  const plot = (arr, y, col, dash, width) => {
+    if (!arr) return;
+    c.strokeStyle = col; c.lineWidth = width; c.setLineDash(dash ? [5, 4] : []);
+    c.beginPath();
+    let pen = false;
+    for (let k = 0; k < arr.length; k++){
+      const v = arr[k];
+      if (v === null || v === undefined){ pen = false; continue; }
+      const x = X((k + 0.5) / B), yy = y(v);
+      pen ? c.lineTo(x, yy) : c.moveTo(x, yy);
+      pen = true;
+    }
+    c.stroke(); c.setLineDash([]); c.lineWidth = 1;
+  };
+  const col = carOf(enSel).color;
+  if (ai){ plot(ai.soc, yS, "#8b93a288", true, 1); plot(ai.kw, yK, "#8b93a2", true, 1.4); }
+  plot(car.soc, yS, col + "88", false, 1);
+  plot(car.kw, yK, col, false, 1.8);
+}
+function drawEnergyTimeline(){
+  const E = DATA.energy, cv = document.getElementById("entl");
+  const cars = E.cars.filter(c => c.profile === "can").map(c => c.i);
+  const rowH = 16, axis = 18, label = 60, w = cv.parentElement.clientWidth - 26;
+  if (w <= 40) return;
+  const h = axis + cars.length * rowH + 10;
+  cv.width = w * devicePixelRatio; cv.height = h * devicePixelRatio;
+  cv.style.width = w + "px"; cv.style.height = h + "px";
+  const c = cv.getContext("2d"); c.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  c.clearRect(0, 0, w, h);
+  const x0 = label, x1 = w - 8, dur = Math.max(1, DATA.meta.durationS || 1);
+  const px = t => x0 + (x1 - x0) * Math.min(Math.max(t, 0), dur) / dur;
+  DATA.cautions.forEach(([a, b]) => { c.fillStyle = "#f2a93b1f";
+    c.fillRect(px(a), axis - 4, Math.max(2, px(b) - px(a)), cars.length * rowH + 8); });
+  c.fillStyle = "#6b7482"; c.font = "9px sans-serif";
+  const stepM = dur > 3600 ? 10 : (dur > 1200 ? 5 : 1);
+  for (let m = 0; m * 60 <= dur; m += stepM){
+    c.fillText(m + "m", px(m * 60) - 4, axis - 7);
+    c.strokeStyle = "#232a38"; c.beginPath(); c.moveTo(px(m * 60), axis - 4); c.lineTo(px(m * 60), h - 8); c.stroke();
+  }
+  const byCar = {};
+  for (const ev of E.events) (byCar[ev[1]] = byCar[ev[1]] || []).push(ev);
+  enTlRows = [];
+  cars.forEach((ci, r) => {
+    const y = axis + r * rowH + rowH / 2;
+    c.strokeStyle = "#222834"; c.lineWidth = 1; c.beginPath(); c.moveTo(x0, y); c.lineTo(x1, y); c.stroke();
+    c.fillStyle = carOf(ci).color; c.beginPath(); c.arc(9, y, 4, 0, 7); c.fill();
+    c.fillStyle = "#9aa3b2"; c.font = "10px sans-serif"; c.fillText(shortName(ci), 18, y + 3);
+    const seg = (kind, t0, t1) => {
+      const yy = kind === 2 ? y - 7 : (kind === 3 ? y + 4 : y - 3), hh = kind >= 2 ? 3 : 6;
+      c.fillStyle = EN_COLORS[kind]; c.fillRect(px(t0), yy, Math.max(1.5, px(t1) - px(t0)), hh);
+    };
+    const open = {};
+    for (const [t, , kind, state] of (byCar[ci] || []).slice().sort((a, b) => a[0] - b[0])){
+      const active = kind === 2 ? state === 4 : (kind === 3 ? state === 2 : state === 1);
+      if (active){ if (open[kind] === undefined) open[kind] = t; }
+      else if (open[kind] !== undefined){ seg(kind, open[kind], t); delete open[kind]; }
+    }
+    for (const k in open) seg(parseInt(k), open[k], dur);
+    enTlRows.push({y, ci});
+  });
+  cv.onclick = ev => {
+    const rect = cv.getBoundingClientRect(), x = ev.clientX - rect.left, yy = ev.clientY - rect.top;
+    const row = enTlRows.find(r => Math.abs(r.y - yy) <= rowH / 2);
+    if (!row || x < x0) return;
+    goReplay((x - x0) / (x1 - x0) * dur, row.ci);
+  };
+}
+
 setLang(LANG);   // static UI renders immediately; replay unlocks when decoded
+if (!DATA.energy){
+  document.getElementById("energytab").style.display = "none";
+  document.getElementById("replayenergy").style.display = "none";
+}
 drawLapChart();
 decodeReplay().then(() => {
   sizeMap(); sizeScrub();

@@ -1,7 +1,7 @@
 """report_html — pack analysis into the single-file HTML report.
 
 Replay binary layout (little-endian, per car contiguous, uniform time grid):
-  stride 32 bytes/sample:
+  stride 40 bytes/sample:
     0  f32 x            4  f32 z
     8  i16 heading      (rad * 1000, map-space heading from position deltas)
     10 u16 speed        (km/h * 10)
@@ -15,6 +15,14 @@ Replay binary layout (little-endian, per car contiguous, uniform time grid):
     26 u16 spline       (s * 65535)
     28 i16 acc_x        (lateral G * 100)
     30 i16 acc_z        (longitudinal G * 100)
+    32 i16 kW           (MGU-K power * 10, + deploy / - harvest; schema 2 CAN cars)
+    34 u16 soc          (battery 0..1 * 10000)
+    36 u8  eflags       1 SM wing open, 2 SM armed, 4 OT active, 8 OT pending,
+                        16 power limited, 32 boost, 64 kW valid, 128 SoC valid
+    37 u8  latch        (raw straight-mode latch 0-4, 255 = n/a)
+    38 2 bytes padding
+  Energy fields are the change-only E stream forward-filled onto the grid; schema-1 logs
+  carry zeros with the valid bits clear.
 JS decodes with a DataView; grid dt is exactly duration/(n-1).
 """
 from __future__ import annotations
@@ -28,11 +36,14 @@ import zlib
 import numpy as np
 
 import corner_style
+import energy
 import thresholds as th
 
-STRIDE = 32
+STRIDE = 40
 REPLAY_HZ = 15.0
-REPORT_VERSION = "1.4"
+REPORT_VERSION = "1.6"
+EF_SM_OPEN, EF_SM_ARMED, EF_OT_ACTIVE, EF_OT_PENDING = 1, 2, 4, 8
+EF_PLIM, EF_BOOST, EF_KW_VALID, EF_SOC_VALID = 16, 32, 64, 128
 
 
 def _thresholds_fingerprint():
@@ -105,6 +116,29 @@ def _pack_replay(rd, an):
         acc_x = np.clip(np.nan_to_num(rs(f["acc_x"])) * 100, -31000, 31000).astype(np.int16)
         acc_z = np.clip(np.nan_to_num(rs(f["acc_z"])) * 100, -31000, 31000).astype(np.int16)
 
+        # schema-2 energy: change-only E samples forward-filled onto the replay grid
+        e = rd.E[ci] if ci < len(getattr(rd, "E", [])) else None
+        if e is not None and len(e["t"]):
+            kw_g = energy.hold_last(e["t"], e["kw"], grid)
+            soc_g = energy.hold_last(e["t"], e["soc"], grid)
+            fl_g = energy.hold_last(e["t"], e["flags"].astype(np.float64), grid)
+            la_g = energy.hold_last(e["t"], e["latch"].astype(np.float64), grid)
+            soc_ok = np.isfinite(soc_g)
+            kw_ok = np.isfinite(kw_g)
+            fl = np.nan_to_num(fl_g, nan=0.0).astype(np.int64)
+            la = np.nan_to_num(la_g, nan=-1.0).astype(np.int64)
+            eflags = (np.where(fl & 128, EF_SM_OPEN, 0) | np.where((la >= 1) & (la <= 3), EF_SM_ARMED, 0)
+                      | np.where(fl & 4, EF_OT_ACTIVE, 0) | np.where(fl & 8, EF_OT_PENDING, 0)
+                      | np.where(fl & 16, EF_PLIM, 0) | np.where(fl & 1, EF_BOOST, 0)
+                      | np.where(kw_ok, EF_KW_VALID, 0) | np.where(soc_ok, EF_SOC_VALID, 0))
+            kw_i = np.clip(np.nan_to_num(kw_g, nan=0.0) * 10, -32000, 32000).astype(np.int16)
+            soc_i = np.clip(np.nan_to_num(soc_g, nan=0.0) * 10000, 0, 65535).astype(np.uint16)
+            latch_i = np.where(la < 0, 255, np.clip(la, 0, 254)).astype(np.uint8)
+            eflags = eflags.astype(np.uint8)
+        else:
+            kw_i = np.zeros(n, np.int16); soc_i = np.zeros(n, np.uint16)
+            eflags = np.zeros(n, np.uint8); latch_i = np.full(n, 255, np.uint8)
+
         rows = zip(x, z,
                    np.clip(heading * 1000, -31000, 31000).astype(np.int16),
                    np.clip(sp * 10, 0, 65535).astype(np.uint16),
@@ -114,14 +148,15 @@ def _pack_replay(rd, an):
                    gear, out, nd[0], nd[1], nd[2], nd[3], surf,
                    np.clip(beta * 10, -31000, 31000).astype(np.int16),
                    np.clip(spline_g * 65535, 0, 65535).astype(np.uint16),
-                   acc_x, acc_z)
+                   acc_x, acc_z, kw_i, soc_i, eflags, latch_i)
         base = ci * n * STRIDE
-        pk = struct.Struct("<ffhHBBhbB4BHhHhh").pack_into
-        for k, (xx, zz, hh, ss, g8, b8, st, gr, ot, n0, n1, n2, n3, sf, bt, spn, ax, az) in enumerate(rows):
+        pk = struct.Struct("<ffhHBBhbB4BHhHhhhHBBxx").pack_into
+        for k, (xx, zz, hh, ss, g8, b8, st, gr, ot, n0, n1, n2, n3, sf, bt, spn, ax, az,
+                ek, es, ef, el) in enumerate(rows):
             pk(buf, base + k * STRIDE, float(xx), float(zz), int(hh), int(ss),
                int(g8), int(b8), int(st), int(gr), int(ot),
                int(n0), int(n1), int(n2), int(n3), int(sf), int(bt), int(spn),
-               int(ax), int(az))
+               int(ax), int(az), int(ek), int(es), int(ef), int(el))
 
     return {"n": n, "dt": dt, "stride": STRIDE, "cars": C}, bytes(buf)
 
@@ -233,6 +268,14 @@ def build_payload(rd, an, tm):
         print(f"      note: corner style stats skipped ({type(e).__name__}: {e})")
         cs_block = None
 
+    # hybrid energy telemetry (v1.6, logger V1.4 / schema 2). None on older logs -> the
+    # template hides the tab; a failure must not cost the user the rest of the report.
+    try:
+        energy_block = energy.analyze(rd)
+    except Exception as e:
+        print(f"      note: energy analysis skipped ({type(e).__name__}: {e})")
+        energy_block = None
+
     payload = {
         "meta": {
             "trackName": rd.meta.get("trackName", ""), "trackFull": rd.meta.get("trackFull", ""),
@@ -267,6 +310,7 @@ def build_payload(rd, an, tm):
                   "labels": labels,
                   "sf": [round(float(tm.pts[sf, 0]), 1), round(float(tm.pts[sf, 2]), 1)]},
         "cornerStyle": cs_block,
+        "energy": energy_block,
         "replay": rep_meta,
     }
     return payload, rep_bin

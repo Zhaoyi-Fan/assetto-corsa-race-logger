@@ -245,6 +245,35 @@ def resolve_ai_path(meta, ac_root=None):
     return p if os.path.isfile(p) else None
 
 
+def sibling_corners(meta, ai_path, corners_dir, ac_root=None):
+    """Curated corners json of ANOTHER layout of the same track whose fast_lane.ai is
+    byte-identical to this layout's -> path, or None.
+
+    Layout families that only change zones / textures (the 2026 `f12026` layouts reuse the
+    2025 AI lines) get the curated corner names for free instead of an auto-numbered skeleton.
+    """
+    import glob
+    import hashlib
+    tf = meta.get("trackFull", "")
+    track = tf.split("/")[0]
+    if not track or "/" not in tf or not ai_path or not os.path.isfile(ai_path):
+        return None
+    with open(ai_path, "rb") as f:
+        want = hashlib.md5(f.read()).hexdigest()
+    root = ac_root or default_ac_root()
+    for cand in sorted(glob.glob(os.path.join(corners_dir, track + "-*.json"))):
+        layout = os.path.basename(cand)[len(track) + 1:-5]
+        if layout == tf.split("/", 1)[1]:
+            continue
+        p = os.path.join(root, "content", "tracks", track, layout, "ai", "fast_lane.ai")
+        if not os.path.isfile(p):
+            continue
+        with open(p, "rb") as f:
+            if hashlib.md5(f.read()).hexdigest() == want:
+                return cand
+    return None
+
+
 if __name__ == "__main__":
     import sys
     tm = load_fast_lane(sys.argv[1])
