@@ -26,10 +26,21 @@
 -- Sampling only runs live (skips pause / replay / main menu). Time base for every line:
 --   milliseconds since session start (sim.time based); absolute start stored in META.
 -- Read-only w.r.t. physics and content files -> league-safe. No ALLOW_APPS needed.
+--
+-- V1.4 (schema 2, 2026-09-22): hybrid energy telemetry for every car.
+--   * E lines (default 10 Hz, written only when the quantised state changed or every 2 s):
+--     MGU-K power kW, SoC, per-lap deploy / regen MJ, deploy input, regen level, current
+--     power caps, strat / split, straight-mode latch, PU mode, flag bits.
+--   * Events: DEPLOY / HARVEST (kW edges with hysteresis), SM (latch changes), OT
+--     (overtake pending / active), ELAP (per-lap energy summary at each lap line).
+--   * Header: ZONES (the layout's drs_zones.ini embedded as JSON), ENERGY (per car ID: which
+--     data source was resolved and the CAN index table used).
+--   Cars with a known CAN profile (VRC FA26 Pro) read their private physics-script channels;
+--   every other car gets the native CSP ERS fields only (SoC, deploy input, delivery mode).
 -- ============================================================================
 
-local SCHEMA_VERSION = 1
-local APP_VERSION    = '1.3'
+local SCHEMA_VERSION = 2
+local APP_VERSION    = '1.4'
 
 local SESSION_NAMES = {
   [0] = 'session', [1] = 'practice', [2] = 'qualify', [3] = 'race',
@@ -42,6 +53,8 @@ local cfg = ac.storage({
   recQuali    = true,   -- record qualify sessions
   recPractice = false,  -- record practice/hotlap/other sessions
   fastHz      = 15,     -- F-tier sample rate (5..30); S is fixed 1 Hz, W every 5 s
+  energy      = true,   -- V1.4 energy telemetry (E lines + energy events)
+  energyHz    = 10,     -- E-tier sample rate (5..15); lines are written on change only
   debug       = false,  -- extra status details in the window
 })
 
@@ -66,6 +79,38 @@ local START_SPEED_KMH  = 1.0   -- movement: speed above this...
 local START_DIST_M     = 0.01  -- ...AND at least this far from the green-light spot
 local START_MOVING_KMH = 2.0   -- already faster than this at green = moving (delta -1)
 local START_WINDOW_S   = 60    -- stop waiting for launches this long after green
+
+-- ---- energy telemetry (V1.4) ----------------------------------------------------------
+-- Two layers. Layer 0 (every car): native ac.getCar(i) ERS fields -> SoC, kersInput,
+-- mgukDelivery, kersCharging. Layer 1 (car IDs listed in ENERGY_PROFILES): the car's private
+-- CAN channels via ac.getCarPhysics(i).scriptControllerInputs, indices resolved at runtime by
+-- NAME from the struct the car's physics script publishes (ac.load('<carID>_CAN') ->
+-- stringify.parse -> inputs[name] = {index, isBoolean}) — the same mechanism as the car's own
+-- extension\data_override\can.lua, nothing hard-coded. Verified 2026-09-22 (Silverstone
+-- f12026, 10 AI): offline AI cars expose the channels exactly like the player, so their
+-- deployment strategy is observable. Adding a car = one ENERGY_PROFILES row (+ a names table
+-- if it uses other channel names); unlisted cars (regular FA26, RSS, FA25 CSP, ...) stay
+-- native-only on purpose.
+local ENERGY_DEPLOY_ON_KW  = 10   -- DEPLOY / HARVEST events: |kW| rising past this ...
+local ENERGY_DEPLOY_OFF_KW = 5    -- ... and falling below this (hysteresis against chatter)
+local ENERGY_EVENT_GAP_MS  = 100  -- min gap between energy events of one kind for one car
+local ENERGY_HEARTBEAT_MS  = 2000 -- E line at least this often per car even if unchanged
+local ENERGY_STRUCT_TRIES  = 30   -- frames to keep retrying ac.load() before giving up
+
+local ENERGY_CAN_NAMES = {        -- canonical field -> CAN input name (VRC FA26 Pro)
+  kW = 'rearMotorPowerKW', kIn = 'kersInput', regen = 'kersRegen',
+  depMJ = 'kersDeployMJ', regMJ = 'kersRegenMJ', strat = 'deploymentStrat',
+  split = 'deploymentSplit', latch = 'drsLatch', puMode = 'puMode',
+  maxKW = 'mgukMaxPower', maxKWLim = 'mgukMaxPowerLimit',
+  boost = 'isHybridBoostActive', anti = 'isHybridAntiActive',
+  otAct = 'isOvertakeActive', otPend = 'isOvertakeActivePending',
+  plim = 'isPowerLimited', plimPend = 'isPowerLimitedPending',
+}
+local ENERGY_FIELDS = { 'kW', 'kIn', 'regen', 'depMJ', 'regMJ', 'strat', 'split', 'latch',
+  'puMode', 'maxKW', 'maxKWLim', 'boost', 'anti', 'otAct', 'otPend', 'plim', 'plimPend' }
+local ENERGY_PROFILES = {
+  vrc_formula_alpha_2026_csp = { key = 'vrc_formula_alpha_2026_csp_CAN', names = ENERGY_CAN_NAMES },
+}
 
 -- ---- paths ------------------------------------------------------------------
 local logsDir     = ac.getFolder(ac.FolderID.Root) .. '\\logs'
@@ -107,6 +152,10 @@ local lastCollAt = {}   -- [key "i:otherRaw:nearest"] = sim.time seconds of last
 -- race-start reaction tracker; nil = inactive (non-race session / green handled / window over)
 -- {prev = last timeToSessionStart, green = sim.time of green light, cars = {[i] = {...}}}
 local startTrack = nil
+-- energy telemetry state (V1.4)
+local energyStructs = {}  -- [carID] = {done, ok, idx = {field = CAN index}, count, tries, err}
+local energyCars    = {}  -- [i] = per-car state machine + lap aggregates (see energyState)
+local energyAcc     = 0
 
 local statusText = 'Idle'
 local fmt = string.format
@@ -191,13 +240,260 @@ end
 
 -- ---- header writers -------------------------------------------------------------
 
+-- ---- energy telemetry (V1.4) ----------------------------------------------------------
+
+-- Embed the layout's drs_zones.ini (SM / overtake / power zones of the FA26 package, plain
+-- DRS zones for older eras) so the report can draw the zones the race was actually run with.
+local function writeZones()
+  local root = ac.getFolder(ac.FolderID.Root)
+  local full = ac.getTrackFullID('/')
+  local track, layout = full:match('^([^/]+)/(.+)$')
+  local path
+  if track then
+    path = fmt('%s\\content\\tracks\\%s\\%s\\data\\drs_zones.ini', root, track, layout)
+  else
+    path = fmt('%s\\content\\tracks\\%s\\data\\drs_zones.ini', root, full)
+  end
+  local data = io.load(path)
+  if data == nil then
+    put(fmt('ZONES,{"file":%s,"exists":false}', jstr(path)))
+    return
+  end
+  local secs, order, cur = {}, {}, nil
+  for line in (data .. '\n'):gmatch('([^\r\n]*)\r?\n') do
+    line = line:gsub(';.*$', ''):gsub('^%s+', ''):gsub('%s+$', '')
+    local name = line:match('^%[(.-)%]$')
+    if name then
+      cur = name
+      if secs[cur] == nil then secs[cur] = {}; order[#order + 1] = cur end
+    elseif cur ~= nil and line ~= '' then
+      local k, v = line:match('^([^=]-)%s*=%s*(.-)$')
+      if k then
+        local n = tonumber(v)
+        secs[cur][#secs[cur] + 1] = fmt('%s:%s', jstr(k), n and fmt('%.14g', n) or jstr(v))
+      end
+    end
+  end
+  local parts = {}
+  for _, name in ipairs(order) do
+    parts[#parts + 1] = fmt('%s:{%s}', jstr(name), table.concat(secs[name], ','))
+  end
+  put(fmt('ZONES,{"file":%s,"exists":true,"sections":{%s}}', jstr(path), table.concat(parts, ',')))
+end
+
+-- Resolve a car ID's energy data source. Listed cars: parse the published CAN struct and map
+-- the canonical fields to channel indices by name (retried for a few frames — the physics
+-- script publishes the struct once the car is loaded). Emits one ENERGY line per car ID once
+-- the outcome is known; a listed car whose struct never resolves falls back to native.
+local function energyResolve(carID)
+  local prof = ENERGY_PROFILES[carID]
+  local s = energyStructs[carID]
+  if s == nil then
+    s = { done = false, ok = false, idx = {}, count = 0, tries = 0, err = '' }
+    energyStructs[carID] = s
+    if prof == nil then
+      s.done = true
+      put(fmt('ENERGY,{"car":%s,"profile":"native"}', jstr(carID)))
+      return s
+    end
+  end
+  if s.done then return s end
+  s.tries = s.tries + 1
+  local raw = ac.load(prof.key)
+  if type(raw) == 'string' and raw ~= '' then
+    local okp, parsed = pcall(stringify.parse, raw)
+    if okp and type(parsed) == 'table' and type(parsed.inputs) == 'table' then
+      local n, missing = 0, {}
+      for _, b in pairs(parsed.inputs) do
+        if type(b) == 'table' and type(b[1]) == 'number' then n = n + 1 end
+      end
+      for _, f in ipairs(ENERGY_FIELDS) do
+        local b = parsed.inputs[prof.names[f] or '']
+        if type(b) == 'table' and type(b[1]) == 'number' then s.idx[f] = b[1]
+        else missing[#missing + 1] = f end
+      end
+      s.count = n
+      s.ok = s.idx.kW ~= nil   -- kW is the one channel the events and profiles need
+      s.err = #missing > 0 and ('missing: ' .. table.concat(missing, ' ')) or ''
+      s.done = true
+    else
+      s.err = 'struct parse failed'
+    end
+  else
+    s.err = 'no struct published'
+  end
+  if not s.done and s.tries >= ENERGY_STRUCT_TRIES then s.done = true end
+  if s.done then
+    local parts = {}
+    for _, f in ipairs(ENERGY_FIELDS) do
+      if s.idx[f] ~= nil then parts[#parts + 1] = fmt('"%s":%d', f, s.idx[f]) end
+    end
+    put(fmt('ENERGY,{"car":%s,"profile":%s,"key":%s,"inputs":%d,"idx":{%s},"error":%s}',
+      jstr(carID), s.ok and '"can"' or '"native"', jstr(prof.key), s.count,
+      table.concat(parts, ','), jstr(s.err)))
+    ac.log(fmt('[VRCLOG] energy source for %s: %s %s', carID, s.ok and 'can' or 'native', s.err))
+  end
+  return s
+end
+
+local function energyState(i)
+  local st = energyCars[i]
+  if st == nil then
+    st = { lastKey = nil, lastWriteT = -1e9, deploying = false, harvesting = false,
+           latch = nil, ot = nil, evT = {}, lapCount = nil,
+           depMax = 0, regMax = 0, socMin = 2, socMax = -1,
+           deployMs = 0, harvestMs = 0, smMs = 0, otMs = 0, plimMs = 0 }
+    energyCars[i] = st
+  end
+  return st
+end
+
+local function canv(sci, idx, f)  -- CAN channel by canonical field, nil if not mapped
+  local k = idx[f]
+  if k == nil then return nil end
+  return num(sci[k])
+end
+
+local function energyEvent(t, kind, i, state, c, soc, kW, st)
+  local last = st.evT[kind]
+  if last ~= nil and t - last < ENERGY_EVENT_GAP_MS then return end
+  st.evT[kind] = t
+  put(fmt('EV,%d,%s,%d,%d,%.5f,%.1f,%.4f,%.1f', t, kind, i, state,
+    num(c.splinePosition), num(c.speedKmh), soc, kW))
+end
+
+local function optf(v, pattern)  -- optional numeric field for E / ELAP lines
+  if v == nil then return '' end
+  return fmt(pattern, v)
+end
+
+-- Per-frame pass: reads every car's energy state, runs the event state machines and the
+-- per-lap aggregates, and (when writeNow) writes an E line for cars whose quantised state
+-- changed since their last line (or after ENERGY_HEARTBEAT_MS).
+local function energyTick(sim, t, dt, writeNow)
+  local dtMs = dt * 1000
+  for i = 0, sim.carsCount - 1 do
+    local c = ac.getCar(i)
+    if c ~= nil and c.isActive then
+      local st = energyState(i)
+      local s = energyResolve(ac.getCarID(i))
+      local sci = nil
+      if s.ok then
+        local ph = ac.getCarPhysics(i)
+        if ph ~= nil and ph.isAvailable then sci = ph.scriptControllerInputs end
+      end
+      local soc = num(c.kersCharge)
+      local flags = c.kersCharging and 64 or 0
+      local kW, kIn, regen, depMJ, regMJ, strat, split, latch, puMode, maxKW, maxKWLim
+      local ot, plim = nil, false
+      if sci ~= nil then
+        local idx = s.idx
+        kW       = canv(sci, idx, 'kW')
+        kIn      = canv(sci, idx, 'kIn') or num(c.kersInput)
+        regen    = canv(sci, idx, 'regen')
+        depMJ    = canv(sci, idx, 'depMJ')
+        regMJ    = canv(sci, idx, 'regMJ')
+        strat    = canv(sci, idx, 'strat') or (c.mgukDelivery + 1)
+        split    = canv(sci, idx, 'split')
+        latch    = canv(sci, idx, 'latch')
+        puMode   = canv(sci, idx, 'puMode')
+        maxKW    = canv(sci, idx, 'maxKW')
+        maxKWLim = canv(sci, idx, 'maxKWLim')
+        if (canv(sci, idx, 'boost') or 0) ~= 0 then flags = flags + 1 end
+        if (canv(sci, idx, 'anti') or 0) ~= 0 then flags = flags + 2 end
+        local otAct  = (canv(sci, idx, 'otAct') or 0) ~= 0
+        local otPend = (canv(sci, idx, 'otPend') or 0) ~= 0
+        if otAct then flags = flags + 4 end
+        if otPend then flags = flags + 8 end
+        plim = (canv(sci, idx, 'plim') or 0) ~= 0
+        if plim then flags = flags + 16 end
+        if (canv(sci, idx, 'plimPend') or 0) ~= 0 then flags = flags + 32 end
+        if latch == 4 then flags = flags + 128 end
+        ot = otAct and 2 or (otPend and 1 or 0)
+      else
+        kIn   = num(c.kersInput)
+        strat = c.mgukDelivery + 1
+      end
+
+      -- lap line: emit the finished lap's summary BEFORE folding this frame in (the CAN
+      -- per-lap counters reset at the line; depMax/regMax still hold the pre-reset values)
+      local lc = c.lapCount
+      if st.lapCount == nil then
+        st.lapCount = lc
+      elseif lc ~= st.lapCount then
+        if sci ~= nil then
+          put(fmt('EV,%d,ELAP,%d,%d,%.3f,%.3f,%.4f,%.4f,%.4f,%d,%d,%d,%d,%d', t, i, lc,
+            st.depMax, st.regMax, soc, st.socMin, st.socMax,
+            math.floor(st.deployMs + 0.5), math.floor(st.harvestMs + 0.5),
+            math.floor(st.smMs + 0.5), math.floor(st.otMs + 0.5), math.floor(st.plimMs + 0.5)))
+        else
+          put(fmt('EV,%d,ELAP,%d,%d,,,%.4f,%.4f,%.4f,,,,,', t, i, lc, soc, st.socMin, st.socMax))
+        end
+        st.lapCount = lc
+        st.depMax, st.regMax, st.socMin, st.socMax = 0, 0, 2, -1
+        st.deployMs, st.harvestMs, st.smMs, st.otMs, st.plimMs = 0, 0, 0, 0, 0
+      end
+      if soc < st.socMin then st.socMin = soc end
+      if soc > st.socMax then st.socMax = soc end
+
+      if kW ~= nil then
+        -- DEPLOY / HARVEST edges with hysteresis
+        if not st.deploying and kW >= ENERGY_DEPLOY_ON_KW then
+          st.deploying = true; energyEvent(t, 'DEPLOY', i, 1, c, soc, kW, st)
+        elseif st.deploying and kW < ENERGY_DEPLOY_OFF_KW then
+          st.deploying = false; energyEvent(t, 'DEPLOY', i, 0, c, soc, kW, st)
+        end
+        if not st.harvesting and kW <= -ENERGY_DEPLOY_ON_KW then
+          st.harvesting = true; energyEvent(t, 'HARVEST', i, 1, c, soc, kW, st)
+        elseif st.harvesting and kW > -ENERGY_DEPLOY_OFF_KW then
+          st.harvesting = false; energyEvent(t, 'HARVEST', i, 0, c, soc, kW, st)
+        end
+        -- straight-mode latch (0 idle, 2 armed past detection, 4 wing open) and overtake mode
+        if latch ~= st.latch then
+          if st.latch ~= nil then energyEvent(t, 'SM', i, latch, c, soc, kW, st) end
+          st.latch = latch
+        end
+        if ot ~= st.ot then
+          if st.ot ~= nil then energyEvent(t, 'OT', i, ot, c, soc, kW, st) end
+          st.ot = ot
+        end
+        -- per-lap aggregates
+        if st.deploying  then st.deployMs  = st.deployMs  + dtMs end
+        if st.harvesting then st.harvestMs = st.harvestMs + dtMs end
+        if latch == 4    then st.smMs      = st.smMs      + dtMs end
+        if ot == 2       then st.otMs      = st.otMs      + dtMs end
+        if plim          then st.plimMs    = st.plimMs    + dtMs end
+        if depMJ ~= nil and depMJ > st.depMax then st.depMax = depMJ end
+        if regMJ ~= nil and regMJ > st.regMax then st.regMax = regMJ end
+      end
+
+      if writeNow then
+        local key = fmt('%d|%d|%d|%d|%d|%d|%s|%s|%d|%s|%s|%s|%d',
+          kW and math.floor(kW + 0.5) or -99999, math.floor(soc * 100 + 0.5),
+          depMJ and math.floor(depMJ * 10 + 0.5) or -1, regMJ and math.floor(regMJ * 10 + 0.5) or -1,
+          math.floor(kIn * 20 + 0.5), regen and math.floor(regen * 20 + 0.5) or -1,
+          optf(maxKW, '%.0f'), optf(maxKWLim, '%.0f'), strat,
+          optf(split, '%.0f'), optf(latch, '%.0f'), optf(puMode, '%.0f'), flags)
+        if key ~= st.lastKey or t - st.lastWriteT >= ENERGY_HEARTBEAT_MS then
+          st.lastKey, st.lastWriteT = key, t
+          put(fmt('E,%d,%d,%s,%.4f,%s,%s,%.2f,%s,%s,%s,%d,%s,%s,%s,%d', t, i,
+            optf(kW, '%.1f'), soc, optf(depMJ, '%.3f'), optf(regMJ, '%.3f'), kIn,
+            optf(regen, '%.2f'), optf(maxKW, '%.0f'), optf(maxKWLim, '%.0f'), strat,
+            optf(split, '%.0f'), optf(latch, '%.0f'), optf(puMode, '%.0f'), flags))
+        end
+      end
+    end
+  end
+end
+
 local function writeHeader(sim, session)
   put(fmt('VRCLOG,%d,%s', SCHEMA_VERSION, APP_VERSION))
   put(fmt('META,{"schema":%d,"date":%s,"track":%s,"trackFull":%s,"trackName":%s,'
       .. '"trackLengthM":%.1f,"sessionIndex":%d,"sessionType":%d,"sessionName":%s,'
       .. '"laps":%d,"durationMin":%.1f,"timedRace":%s,"cars":%d,"fastHz":%d,"slowHz":1,'
       .. '"weatherEvery":5,"simTime0":%.0f,"systemTime":%.0f,"restart":%d,'
-      .. '"airTemp":%.1f,"roadTemp":%.1f,"grip":%.3f,"rain":%.3f}',
+      .. '"airTemp":%.1f,"roadTemp":%.1f,"grip":%.3f,"rain":%.3f,'
+      .. '"energy":%s,"energyHz":%d}',
     SCHEMA_VERSION,
     jstr(dateStamp('%Y-%m-%d %H:%M:%S')),
     jstr(ac.getTrackID()), jstr(ac.getTrackFullID('/')), jstr(ac.getTrackName()),
@@ -206,16 +502,29 @@ local function writeHeader(sim, session)
     session and session.laps or 0, session and session.durationMinutes or 0,
     (session and session.isTimedRace) and 'true' or 'false',
     sim.carsCount, math.floor(cfg.fastHz + 0.5), t0, sim.systemTime, restartCount,
-    sim.ambientTemperature, sim.roadTemperature, sim.roadGrip, sim.rainIntensity))
+    sim.ambientTemperature, sim.roadTemperature, sim.roadGrip, sim.rainIntensity,
+    cfg.energy and 'true' or 'false', math.floor(cfg.energyHz + 0.5)))
   for i = 0, sim.carsCount - 1 do
     local c = ac.getCar(i)
     if c ~= nil then
+      local carID = ac.getCarID(i)
       put(fmt('CAR,%d,{"driver":%s,"car":%s,"skin":%s,"ai":%s,"aiLevel":%.3f,'
           .. '"aiAggression":%.3f,"ballast":%.1f,"restrictor":%.1f,"maxFuel":%.1f,'
-          .. '"compound":%d}',
-        i, jstr(ac.getDriverName(i)), jstr(ac.getCarID(i)), jstr(ac.getCarSkinID(i)),
+          .. '"compound":%d,"energy":%s}',
+        i, jstr(ac.getDriverName(i)), jstr(carID), jstr(ac.getCarSkinID(i)),
         c.isAIControlled and 'true' or 'false', num(c.aiLevel), num(c.aiAggression),
-        num(c.ballast), num(c.restrictor), num(c.maxFuel), c.compoundIndex))
+        num(c.ballast), num(c.restrictor), num(c.maxFuel), c.compoundIndex,
+        ENERGY_PROFILES[carID] and '"can"' or '"native"'))
+    end
+  end
+  -- V1.4: zones of the layout + energy source per car ID (ENERGY lines may also appear
+  -- later in the file if a CAN struct only resolves after a few frames)
+  local okz, errz = pcall(writeZones)
+  if not okz then ac.log('[VRCLOG] zones: ' .. tostring(errz)) end
+  if cfg.energy then
+    for i = 0, sim.carsCount - 1 do
+      local ok, err = pcall(energyResolve, ac.getCarID(i))
+      if not ok then ac.log('[VRCLOG] energy resolve: ' .. tostring(err)) end
     end
   end
 end
@@ -246,6 +555,7 @@ local function startRecording(sim)
   linesTotal, bytesTotal, writeErrors = 0, 0, 0
   prevInPitlane, prevInPit, prevRetired, prevFinished = {}, {}, {}, {}
   lastCollAt = {}
+  energyStructs, energyCars, energyAcc = {}, {}, 0
   prevFlag = sim.raceFlagType
   -- arm start-reaction tracking for race sessions only; stays inert until a real
   -- positive->zero countdown transition is seen (so joining mid-race logs nothing)
@@ -601,6 +911,23 @@ function script.update(dt)
     end
   end
 
+  -- energy telemetry (V1.4): per-frame state machine, E lines at cfg.energyHz ---------------
+  if cfg.energy then
+    local energyPeriod = 1 / math.max(5, math.min(15, cfg.energyHz))
+    energyAcc = energyAcc + sim.dt
+    local writeNow = energyAcc >= energyPeriod
+    if writeNow then energyAcc = energyAcc % energyPeriod end
+    local ok, err = pcall(energyTick, sim, t, sim.dt, writeNow)
+    if not ok then
+      -- keep the F/S/W/EV recording alive; surface the energy failure once per message
+      local msg = 'energy error: ' .. tostring(err)
+      if lastEvent ~= msg then
+        lastEvent = msg
+        ac.log('[VRCLOG] ' .. msg)
+      end
+    end
+  end
+
   local fastPeriod = 1 / math.max(5, math.min(30, cfg.fastHz))
 
   fastAcc = fastAcc + sim.dt
@@ -650,6 +977,8 @@ function script.windowMain(dt)
   if ui.checkbox('Record qualify sessions', cfg.recQuali) then cfg.recQuali = not cfg.recQuali end
   if ui.checkbox('Record practice/other sessions', cfg.recPractice) then cfg.recPractice = not cfg.recPractice end
   cfg.fastHz = math.floor(ui.slider('##fasthz', cfg.fastHz, 5, 30, 'Fast tier: %.0f Hz', true) + 0.5)
+  if ui.checkbox('Energy telemetry (E lines + DEPLOY/HARVEST/SM/OT/ELAP events)', cfg.energy) then cfg.energy = not cfg.energy end
+  cfg.energyHz = math.floor(ui.slider('##energyhz', cfg.energyHz, 5, 15, 'Energy tier: %.0f Hz (change-only)', true) + 0.5)
 
   ui.separator()
   ui.textColored(statusText, recording and rgbm(0.6, 1, 0.6, 1) or rgbm(0.85, 0.85, 0.85, 1))

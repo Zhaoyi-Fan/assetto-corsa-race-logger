@@ -1,4 +1,4 @@
-# VRC Race Logger — log format spec (schema 1) + app notes
+# VRC Race Logger — log format spec (schema 1 + schema 2) + app notes
 
 **App:** `<AC root>\apps\lua\vrc_race_logger\`
 (read-only CSP Lua app, `[CORE] LAZY = NONE` → loads at AC start, runs with window closed).
@@ -7,6 +7,20 @@
 merged on finalize; `_rN` suffix = Nth session restart). `logs\_active_recording.txt` is the
 crash pointer (2 lines: partsDir, finalPath); if present at next AC launch, leftovers are merged
 automatically with `END reason=salvaged`.
+
+**App V1.4 additions (2026-09-22) — SCHEMA 2** (new line types, so the number bumps; every
+schema-1 line keeps its exact shape, a schema-1 parser only has to skip `E`, `ZONES`, `ENERGY`
+and the new `EV` kinds):
+- Hybrid energy telemetry for every car: `E` stream (default 10 Hz, change-only), energy
+  events `DEPLOY` / `HARVEST` / `SM` / `OT`, per-lap `ELAP` summaries — see the
+  "Energy telemetry" section. Data source per car ID is declared in `ENERGY` header lines:
+  cars with a known CAN profile (VRC Formula Alpha 2026 Pro, `vrc_formula_alpha_2026_csp`)
+  read the physics script's private channels; everything else gets native CSP ERS fields.
+- `ZONES` header line: the layout's `drs_zones.ini` embedded as JSON (SM / overtake / power
+  zones for the 2026 package, plain DRS zones for older eras) so reports draw the zones the
+  race was actually run with, whatever the track files look like later.
+- META gains `energy` (bool) and `energyHz`; CAR gains `energy` ("can" | "native" — the
+  intended profile; the `ENERGY` line says what actually resolved).
 
 **App V1.3 additions (2026-07-24, additive only — schema stays 1):**
 - Race-start reaction tracking: one `GREEN` event at lights-out + per-car `LAUNCH` events
@@ -55,7 +69,29 @@ cars, fastHz, slowHz (=1), weatherEvery (=5 s), simTime0, systemTime, restart (i
 airTemp, roadTemp, grip, rain`.
 
 CAR keys: `driver, car (folder ID), skin, ai (bool), aiLevel (0..1, -1=human),
-aiAggression (launcher ×0.95, -1=human), ballast (kg), restrictor, maxFuel, compound (index)`.
+aiAggression (launcher ×0.95, -1=human), ballast (kg), restrictor, maxFuel, compound (index)`,
+schema 2: `+ energy ("can" | "native")`.
+
+Schema 2 header lines (after the CAR lines; `ENERGY` may also appear later in the file):
+
+```
+ZONES,{"file":"<abs path>","exists":true,"sections":{"ZONE_0":{"START":0.97,"END":0.02,...},
+       "ZONE_OVERTAKE":{...},"ZONE_POWER_REDUCTION_0":{...},...}}     (exists:false → no file)
+ENERGY,{"car":"<carID>","profile":"can","key":"<carID>_CAN","inputs":122,
+        "idx":{"kW":162,"kIn":5,...},"error":""}                        one per car ID
+ENERGY,{"car":"<carID>","profile":"native"}                              cars without a CAN profile
+```
+
+`ZONES.sections` keeps the ini's section order and raw keys; numeric values are numbers,
+anything else a string. The 2026 package's section kinds seen so far: `ZONE_n` (straight
+mode, `START` / `END` / `START_LOW_GRIP`), `ZONE_OVERTAKE` (`DETECTION`, `START`,
+`DETECTION_GAP_S`), `ZONE_ALT_POWER_CURVE_n`, `ZONE_POWER_REDUCTION_n` (`POWER_REDUCTION_KW`),
+`ZONE_POWER_RESET_n`, `ZONE_SPEED_THRESHOLD_n` (`SPEED_THRESHOLD_KMH`), each with
+`SESSION_TYPE` = ALL | RACE | QUALIFY.
+`ENERGY.idx` maps the canonical E-line fields to `scriptControllerInputs` indices resolved by
+NAME at runtime from the car's published struct (indices differ between car versions — FA25
+CSP uses 211 where FA26 Pro uses 140 — so never hard-code them). A listed car whose struct
+never resolved reports `profile:"native"` with the reason in `error`.
 
 ## F — fast stream (default 15 Hz, configurable 5–30; per active car)
 
@@ -151,6 +187,80 @@ GREEN/LAUNCH notes — **race-start reaction, app V1.3+ (2026-07-24), race sessi
 - Cars that never move within **60 s** of green get **no kind-1 line** (stalled/AFK — analyzer
   shows "—"). A missing GREEN line altogether = pre-1.3 log, joined mid-race, or no countdown
   seen: parser must expose "no start data", never guess.
+
+## Energy telemetry (schema 2, app V1.4+)
+
+Verified on 2026-09-22 (ks_silverstone f12026, VRC FA26 Pro, 1 player + 10 AI): offline AI
+cars expose the physics script's CAN channels exactly like the player, so AI deployment
+strategy is observable. Two data layers per car:
+
+- **native** (every car): `soc` = `kersCharge` 0–1, `kIn` = `kersInput`, `strat` =
+  `mgukDelivery + 1`, flag bit 64 = `kersCharging`. Everything else blank.
+- **can** (car IDs with a profile): the fields below from `scriptControllerInputs`.
+
+### E — energy stream (per car, cfg.energyHz default 10, 5–15; change-only)
+
+```
+E,t,car,kW,soc,depMJ,regMJ,kIn,regen,maxKW,maxKWLim,strat,split,latch,puMode,flags
+```
+
+| field | unit / notes |
+|---|---|
+| kW | MGU-K electrical power, **+ = deploy, − = harvest** (`rearMotorPowerKW`, ±350 for the FA26 Pro); blank for native cars |
+| soc | ES state of charge 0–1 (native `kersCharge`). FA26 Pro ES = 4 + 4·soc MJ (the car's own `kersChargeESOC`, 4–8 MJ window, `kersMaxKJ` = 4000) |
+| depMJ, regMJ | `kersDeployMJ` / `kersRegenMJ` — **per-lap counters that reset at the line** (so the per-lap value is the maximum inside the lap, never last−first); blank for native |
+| kIn | deploy request 0–1 (CAN `kersInput`, native fallback) |
+| regen | regen level 0–1 (`kersRegen`); blank for native |
+| maxKW | current deploy cap kW (`mgukMaxPower`; AI strats showed 200, player 350/250/150/0, −250 while limited); blank for native |
+| maxKWLim | regulatory power limit kW (`mgukMaxPowerLimit`: 350, 250 inside power-reduction zones, ramps in between); blank for native |
+| strat | deployment strategy 1-based (`deploymentStrat`; native: `mgukDelivery + 1`) |
+| split | deploy-map segment along the lap 0–14, monotonic with spline for the player, constant 0 for AI (`deploymentSplit`); blank for native |
+| latch | straight-mode latch (`drsLatch`): 0 idle, 1–3 arming stages (player only), **2 = armed past the detection line (AI)**, **4 = wing open** (⇔ `drsMode` 2 ⇔ extra switches 7+8); blank for native |
+| puMode | `puMode` (1-based); blank for native |
+| flags | bitmask: 1 hybrid boost, 2 hybrid anti, 4 overtake active, 8 overtake pending, 16 power limited, 32 power-limit pending, 64 kersCharging (native; NOT a reliable harvest signal — only 4 in 10 harvest samples had it set, use kW), 128 SM wing open (latch == 4) |
+
+Change-only writing: a line is written at the E tick only when the quantised state changed
+(kW 1 kW, soc 0.01, MJ 0.1, kIn/regen 0.05, everything else exact) or 2 s passed since the
+car's last line (heartbeat). Readers must **hold the last value** between lines. Expected
+volume: ~0.4 MB/min for 20 FA26 cars at 10 Hz (vs 2.5–3 MB/min for F).
+
+### Energy events (can cars only, edge-detected every frame)
+
+```
+EV,t,DEPLOY,car,state,spline,speedKmh,soc,kW    state 1 when kW rises ≥ +10, 0 when it falls < +5
+EV,t,HARVEST,car,state,spline,speedKmh,soc,kW   state 1 when kW falls ≤ −10, 0 when it rises > −5
+EV,t,SM,car,latch,spline,speedKmh,soc,kW        every latch change (…→2 armed →4 open →0)
+EV,t,OT,car,state,spline,speedKmh,soc,kW        0 off / 1 pending / 2 active (overtake mode)
+EV,t,ELAP,car,lapCount,depMJ,regMJ,socLine,socMin,socMax,deployMs,harvestMs,smMs,otMs,plimMs
+```
+
+- Hysteresis (10 / 5 kW) plus a 100 ms minimum gap per car and kind keep chatter out; a reader
+  should still treat every event as a *state sample* (state value carried in the line) rather
+  than assume strict on/off pairing.
+- The first frame of a session only initialises the state machines (no SM/OT event for the
+  state a car is already in; a car already deploying does get a DEPLOY 1).
+- `ELAP` fires on every `lapCount` change (so lap 1's line summarises the out-lap / lap 0):
+  `depMJ` / `regMJ` = the per-lap counters' maxima before the reset, `socLine` = soc at the
+  line, `socMin` / `socMax` inside the lap, and time in ms spent deploying / harvesting /
+  with the SM wing open / in overtake mode / power-limited, accumulated per render frame.
+  Native cars get `EV,t,ELAP,car,lapCount,,,socLine,socMin,socMax,,,,,`.
+- Power-limited and boost / anti states are NOT events (they flicker several times per
+  straight) — read them from the E flags. `split` is position-derived, so no SPLIT event.
+
+Baseline seen in the verification runs (Silverstone f12026, race, 10 AI): player ±350 kW,
+8.2 MJ deployed per lap (11.3 on lap 1), harvest pinned at the 8.0 / 8.5 MJ per-lap cap, SoC
+at the line 0.24; AI capped at 200 kW (`maxKW` 200), 2.1–2.3 MJ per lap, SoC at the line
+0.88–0.92, power-limited ~55 s of a 96 s lap — the gap the league's AI-deployment tuning is
+about. Two field notes for readers of the raw events:
+- **AI deployment is pulsed**: corner-exit bursts of 100–300 ms (164 → −63 → 128 → 200 kW
+  within 0.7 s), plus a −0.x…−7 kW trickle between corners. Expect 14–23 DEPLOY/HARVEST
+  episodes per AI lap against ~7 for the player; the events are faithful, but the per-lap
+  time budgets in `ELAP` are the robust numbers.
+- The player's `isOvertakeActive` flag stayed set for a whole lap (≈90 s) after activation in
+  this build, while AI cars showed ~5 s bursts; `OT` events and `otMs` report the flag as the
+  car publishes it.
+- SM latch 4 can fire more than once per zone (ZONE_0 wraps the start/finish line and re-opens
+  right after it), so `smN` per lap is 4–6 on a 4-zone layout.
 
 ## Trailer
 
