@@ -37,10 +37,12 @@
 --     data source was resolved and the CAN index table used).
 --   Cars with a known CAN profile (VRC FA26 Pro) read their private physics-script channels;
 --   every other car gets the native CSP ERS fields only (SoC, deploy input, delivery mode).
+-- V1.4.1 (2026-09-23, format unchanged): ELAP depMJ / regMJ no longer carry the previous lap's
+--   total into the next lap (the CAN counters reset a frame or two after lapCount changes).
 -- ============================================================================
 
 local SCHEMA_VERSION = 2
-local APP_VERSION    = '1.4'
+local APP_VERSION    = '1.4.1'
 
 local SESSION_NAMES = {
   [0] = 'session', [1] = 'practice', [2] = 'qualify', [3] = 'race',
@@ -96,6 +98,12 @@ local ENERGY_DEPLOY_OFF_KW = 5    -- ... and falling below this (hysteresis agai
 local ENERGY_EVENT_GAP_MS  = 100  -- min gap between energy events of one kind for one car
 local ENERGY_HEARTBEAT_MS  = 2000 -- E line at least this often per car even if unchanged
 local ENERGY_STRUCT_TRIES  = 30   -- frames to keep retrying ac.load() before giving up
+-- The per-lap counters (kersDeployMJ / kersRegenMJ) reset a frame or two AFTER AC's lapCount
+-- changes (FA26 Pro, player and AI, 2026-09-22 Silverstone), so the first frames of a lap still
+-- show the previous lap's total. After a lap change a counter joins the new lap's maximum only
+-- once it has dropped below the finished lap's value; one that has not dropped within this
+-- window is taken as it is, so a counter that never resets can't blank a lap.
+local ENERGY_LAP_SETTLE_MS = 1000
 
 local ENERGY_CAN_NAMES = {        -- canonical field -> CAN input name (VRC FA26 Pro)
   kW = 'rearMotorPowerKW', kIn = 'kersInput', regen = 'kersRegen',
@@ -342,6 +350,7 @@ local function energyState(i)
     st = { lastKey = nil, lastWriteT = -1e9, deploying = false, harvesting = false,
            latch = nil, ot = nil, evT = {}, lapCount = nil,
            depMax = 0, regMax = 0, socMin = 2, socMax = -1,
+           depHold = 0, regHold = 0, holdT = 0,  -- previous lap's counters until they reset
            deployMs = 0, harvestMs = 0, smMs = 0, otMs = 0, plimMs = 0 }
     energyCars[i] = st
   end
@@ -415,8 +424,9 @@ local function energyTick(sim, t, dt, writeNow)
         strat = c.mgukDelivery + 1
       end
 
-      -- lap line: emit the finished lap's summary BEFORE folding this frame in (the CAN
-      -- per-lap counters reset at the line; depMax/regMax still hold the pre-reset values)
+      -- lap line: emit the finished lap's summary BEFORE folding this frame in. The CAN per-lap
+      -- counters reset at or a frame or two after the line, so this frame may still show the
+      -- finished lap; depHold/regHold keep those values out of the new lap until they reset.
       local lc = c.lapCount
       if st.lapCount == nil then
         st.lapCount = lc
@@ -430,6 +440,9 @@ local function energyTick(sim, t, dt, writeNow)
           put(fmt('EV,%d,ELAP,%d,%d,,,%.4f,%.4f,%.4f,,,,,', t, i, lc, soc, st.socMin, st.socMax))
         end
         st.lapCount = lc
+        st.depHold = math.max(st.depMax, st.depHold)
+        st.regHold = math.max(st.regMax, st.regHold)
+        st.holdT = t
         st.depMax, st.regMax, st.socMin, st.socMax = 0, 0, 2, -1
         st.deployMs, st.harvestMs, st.smMs, st.otMs, st.plimMs = 0, 0, 0, 0, 0
       end
@@ -463,8 +476,15 @@ local function energyTick(sim, t, dt, writeNow)
         if latch == 4    then st.smMs      = st.smMs      + dtMs end
         if ot == 2       then st.otMs      = st.otMs      + dtMs end
         if plim          then st.plimMs    = st.plimMs    + dtMs end
-        if depMJ ~= nil and depMJ > st.depMax then st.depMax = depMJ end
-        if regMJ ~= nil and regMJ > st.regMax then st.regMax = regMJ end
+        local settled = t - st.holdT > ENERGY_LAP_SETTLE_MS
+        if depMJ ~= nil then
+          if st.depHold > 0 and (depMJ < st.depHold or settled) then st.depHold = 0 end
+          if st.depHold == 0 and depMJ > st.depMax then st.depMax = depMJ end
+        end
+        if regMJ ~= nil then
+          if st.regHold > 0 and (regMJ < st.regHold or settled) then st.regHold = 0 end
+          if st.regHold == 0 and regMJ > st.regMax then st.regMax = regMJ end
+        end
       end
 
       if writeNow then

@@ -9,11 +9,15 @@ Known schema-1 quirks handled here:
 Schema 2 (logger V1.4) adds the energy telemetry: per-car E stream (change-only, so
 readers hold the last value), DEPLOY/HARVEST/SM/OT events, ELAP per-lap summaries, and
 the ZONES / ENERGY header lines. Schema-1 logs simply have none of it (rd.E empty).
+Known schema-2 quirk handled here:
+  * Logger 1.4 ELAP depMJ/regMJ can repeat the previous lap's total (the CAN counters
+    reset a frame or two after lapCount) -> rebuilt from the E stream, see _repair_elap_carry.
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import numpy as np
 
 WHEEL_NAMES = ("FL", "FR", "RL", "RR")
@@ -42,6 +46,10 @@ FLAG_AI_PITTING, FLAG_AI_RAIN, FLAG_DRS_AVAIL, FLAG_DRS_ACTIVE = 16, 32, 64, 128
 EFLAG_BOOST, EFLAG_ANTI, EFLAG_OT_ACTIVE, EFLAG_OT_PENDING = 1, 2, 4, 8
 EFLAG_PLIM, EFLAG_PLIM_PENDING, EFLAG_CHARGING, EFLAG_SM_OPEN = 16, 32, 64, 128
 ENERGY_EVENT_TYPES = frozenset(("DEPLOY", "HARVEST", "SM", "OT"))
+# ELAP counter carry-over (logger 1.4, fixed in 1.4.1): see _repair_elap_carry
+ELAP_FIXED_IN = (1, 4, 1)
+ELAP_CARRY_TOL_MJ = 0.005   # ELAP above the E-stream rebuild by more than this = carried value
+ELAP_SETTLE_S = 1.0         # the counters reset within this long after the lap change
 
 
 class RaceData:
@@ -67,6 +75,7 @@ class RaceData:
         self.E = []                 # per car: {field: np.ndarray} change-only samples, t in s
         self.energy_cars = []       # per car: True when the E stream carries CAN kW data
         self.ev_elap = []           # per-lap energy summaries (dicts, None for blanks)
+        self.elap_repaired = 0      # logger-1.4 ELAP counters rebuilt from the E stream
         self.zones = None           # ZONES header json (layout drs_zones.ini) or None
         self.energy_src = {}        # ENERGY header lines keyed by car ID
 
@@ -289,6 +298,7 @@ def parse(path):
 
     _build_start(rd)
     _align_grids(rd)
+    _repair_elap_carry(rd)
     return rd
 
 
@@ -357,6 +367,71 @@ def _align_grids(rd):
             f["surf_w"] = f["surf_w"][idx]
 
 
+def _version_tuple(v):
+    m = re.match(r"(\d+)\.(\d+)(?:\.(\d+))?", v or "")
+    return tuple(int(x or 0) for x in m.groups()) if m else (0, 0, 0)
+
+
+def _counter_at_line(t, v, kw, t0, t1, sign):
+    """E-stream value of a per-lap counter at the lap line t1, for the lap that began at t0.
+
+    Rows written in a lap-change frame (t == t0 or t1) may show either lap, so both are left
+    out; so are rows before the counter's reset (the first drop within ELAP_SETTLE_S of t0).
+    The last remaining row is carried to the line with its kW (sign +1 deploy, -1 harvest):
+    the stream writes a row on any 1 kW change, so that kW held until the line.
+    """
+    idx = np.nonzero((t > t0) & (t < t1) & np.isfinite(v))[0]
+    if not len(idx):
+        return None
+    before = np.nonzero((t <= t0) & np.isfinite(v))[0]
+    if len(before):
+        prev, k = v[before[-1]], 0
+        while k < len(idx) and t[idx[k]] - t0 <= ELAP_SETTLE_S and v[idx[k]] >= prev - 1e-4:
+            prev = v[idx[k]]
+            k += 1
+        # no drop inside the window: nothing reset here (or the lap before ended at 0)
+        if k < len(idx) and t[idx[k]] - t0 <= ELAP_SETTLE_S:
+            idx = idx[k:]
+    last = idx[-1]
+    rate = max(sign * float(kw[last]), 0.0) / 1000.0 if np.isfinite(kw[last]) else 0.0
+    return max(float(v[idx].max()), float(v[last]) + rate * (t1 - float(t[last])))
+
+
+def _repair_elap_carry(rd):
+    """Logger 1.4 ELAP depMJ/regMJ carry-over repair (bug found 2026-09-23, fixed in 1.4.1).
+
+    The FA26 Pro resets its per-lap counters a frame or two after AC's lapCount changes, and
+    logger 1.4 took their maximum over every frame of the new lap, so a lap that ended lower
+    than the one before repeated that lap's total (2026-09-22 Silverstone: 29 of 55 laps, the
+    AI ones exactly; the player's regen read 8.5 on laps 3 and 5 instead of 8.0). For files
+    older than ELAP_FIXED_IN each counter is rebuilt from the E stream (_counter_at_line);
+    an ELAP value more than ELAP_CARRY_TOL_MJ above the rebuild is the carried one and is
+    replaced (original kept as dep_mj_raw / reg_mj_raw). On that race clean laps matched the
+    rebuild within 0.003 MJ and carried values sat 0.013-1.14 MJ above it. A car's first ELAP
+    has no lap change before it, and 1.4.1+ files are used as written.
+    """
+    rd.elap_repaired = 0
+    if rd.schema < 2 or _version_tuple(rd.app_version) >= ELAP_FIXED_IN:
+        return
+    by_car = {}
+    for l in rd.ev_elap:
+        by_car.setdefault(l["car"], []).append(l)
+    for ci, laps in by_car.items():
+        if not (0 <= ci < len(rd.E)) or not rd.energy_cars[ci]:
+            continue
+        e = rd.E[ci]
+        laps.sort(key=lambda l: l["t"])
+        for prev, cur in zip(laps, laps[1:]):
+            for key, sign in (("dep_mj", 1.0), ("reg_mj", -1.0)):
+                if cur[key] is None:
+                    continue
+                est = _counter_at_line(e["t"], e[key], e["kw"], prev["t"], cur["t"], sign)
+                if est is not None and cur[key] > est + ELAP_CARRY_TOL_MJ:
+                    cur[key + "_raw"] = cur[key]
+                    cur[key] = round(est, 3)
+                    rd.elap_repaired += 1
+
+
 def summary(rd):
     lines = [f"file: {os.path.basename(rd.path)}  schema {rd.schema} app {rd.app_version}",
              f"track: {rd.meta.get('trackFull')} ({rd.meta.get('trackLengthM', 0):.0f} m)  "
@@ -381,6 +456,9 @@ def summary(rd):
         lines.append(f"  ENERGY: E={n_e} lines, can cars={sum(rd.energy_cars)}/{rd.n_cars}, "
                      f"energy EV={n_ev}, ELAP={len(rd.ev_elap)}, "
                      f"zones={'yes' if rd.zones and rd.zones.get('exists') else 'no'}")
+        if rd.elap_repaired:
+            lines.append(f"  ELAP: {rd.elap_repaired} carried-over depMJ/regMJ values rebuilt "
+                         f"from the E stream (logger {rd.app_version} < 1.4.1)")
     if rd.start:
         reacts = sorted((v["react_ms"], c) for c, v in rd.start["launch"].items()
                         if v["react_ms"] is not None)

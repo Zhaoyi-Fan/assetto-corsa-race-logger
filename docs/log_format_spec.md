@@ -8,6 +8,14 @@ merged on finalize; `_rN` suffix = Nth session restart). `logs\_active_recording
 crash pointer (2 lines: partsDir, finalPath); if present at next AC launch, leftovers are merged
 automatically with `END reason=salvaged`.
 
+**App V1.4.1 (2026-09-23) — format unchanged, schema stays 2:** `ELAP` `depMJ` / `regMJ`
+carry-over fix. The FA26 Pro resets its per-lap counters a frame or two *after* AC's `lapCount`
+changes; V1.4 folded those first frames into the new lap's maximum, so every lap that ended
+lower than the lap before repeated that lap's total (2026-09-22 Silverstone race: 49 of 110
+counter values in 29 of 55 laps, mostly AI). V1.4.1 keeps a counter out of the new lap until it
+drops below the finished lap's value. V1.4 files (`VRCLOG,2,1.4`) are rebuilt by the analyzer —
+see "Counter reset lag" in the energy events section.
+
 **App V1.4 additions (2026-09-22) — SCHEMA 2** (new line types, so the number bumps; every
 schema-1 line keeps its exact shape, a schema-1 parser only has to skip `E`, `ZONES`, `ENERGY`
 and the new `EV` kinds):
@@ -208,7 +216,7 @@ E,t,car,kW,soc,depMJ,regMJ,kIn,regen,maxKW,maxKWLim,strat,split,latch,puMode,fla
 |---|---|
 | kW | MGU-K electrical power, **+ = deploy, − = harvest** (`rearMotorPowerKW`, ±350 for the FA26 Pro); blank for native cars |
 | soc | ES state of charge 0–1 (native `kersCharge`). FA26 Pro ES = 4 + 4·soc MJ (the car's own `kersChargeESOC`, 4–8 MJ window, `kersMaxKJ` = 4000) |
-| depMJ, regMJ | `kersDeployMJ` / `kersRegenMJ` — **per-lap counters that reset at the line** (so the per-lap value is the maximum inside the lap, never last−first); blank for native |
+| depMJ, regMJ | `kersDeployMJ` / `kersRegenMJ` — **per-lap counters that reset at the line**, up to a couple of frames after AC's `lapCount` (see "Counter reset lag"), so the per-lap value is the maximum inside the lap, never last−first; blank for native |
 | kIn | deploy request 0–1 (CAN `kersInput`, native fallback) |
 | regen | regen level 0–1 (`kersRegen`); blank for native |
 | maxKW | current deploy cap kW (`mgukMaxPower`; AI strats showed 200, player 350/250/150/0, −250 while limited); blank for native |
@@ -240,16 +248,38 @@ EV,t,ELAP,car,lapCount,depMJ,regMJ,socLine,socMin,socMax,deployMs,harvestMs,smMs
 - The first frame of a session only initialises the state machines (no SM/OT event for the
   state a car is already in; a car already deploying does get a DEPLOY 1).
 - `ELAP` fires on every `lapCount` change (so lap 1's line summarises the out-lap / lap 0):
-  `depMJ` / `regMJ` = the per-lap counters' maxima before the reset, `socLine` = soc at the
+  `depMJ` / `regMJ` = the per-lap counters' maxima inside the lap, `socLine` = soc at the
   line, `socMin` / `socMax` inside the lap, and time in ms spent deploying / harvesting /
   with the SM wing open / in overtake mode / power-limited, accumulated per render frame.
   Native cars get `EV,t,ELAP,car,lapCount,,,socLine,socMin,socMax,,,,,`.
+- **Counter reset lag (carry-over).** The CAN counters reset in the `lapCount` change frame or
+  1–2 frames later (the 2026-09-22 race had both: the player's lap 2 did not inherit lap 1's
+  11.25 MJ, lap 3 did inherit lap 2's 8.20), so the first frames of a lap can still show the
+  finished lap's total. V1.4.1+ leaves a counter out of the new lap's maximum until it has
+  dropped below the finished lap's value (after 1 s it is taken as it is, so a counter that
+  never resets can't blank a lap): `depMJ` / `regMJ` are the counters in the last frame
+  before the line. **V1.4 did not**, so its ELAP repeats the previous lap's value whenever a
+  lap ended lower — exactly for AI cars (idle at the line), plus a frame or two of deployment
+  for a player deploying across it. On the 2026-09-22 race that was 29 of 55 laps; the
+  player's regen read 8.5 on laps 3 and 5 instead of 8.0 and the AI deploy median read 2.22
+  instead of 2.11 MJ/lap. Readers of V1.4 files must rebuild those values from the E stream.
+  The analyzer does (`vrclog_parser._repair_elap_carry`, V1.4 files only): per lap it takes
+  the E rows strictly between the two lap-change times, drops the leading ones that come
+  before the counter's reset (the first drop within 1 s), carries the last one to the line
+  with its kW (+ deploy / − harvest; the stream writes a row on any 1 kW change, so that kW
+  held), and replaces the ELAP value when it is more than 0.005 MJ above that (original kept
+  as `dep_mj_raw` / `reg_mj_raw`, count in `rd.elap_repaired` and the report's
+  `energy.elapRepaired`). On that race clean laps matched the rebuild within 0.003 MJ and
+  carried values sat 0.013–1.14 MJ above it. A rebuilt value can read up to one frame of
+  deployment higher than V1.4.1 writes (≤ 0.006 MJ at 350 kW / 60 fps); carry-overs under
+  0.005 MJ stay as written.
 - Power-limited and boost / anti states are NOT events (they flicker several times per
   straight) — read them from the E flags. `split` is position-derived, so no SPLIT event.
 
 Baseline seen in the verification runs (Silverstone f12026, race, 10 AI): player ±350 kW,
 8.2 MJ deployed per lap (11.3 on lap 1), harvest pinned at the 8.0 / 8.5 MJ per-lap cap, SoC
-at the line 0.24; AI capped at 200 kW (`maxKW` 200), 2.1–2.3 MJ per lap, SoC at the line
+at the line 0.24; AI capped at 200 kW (`maxKW` 200), 2.0–2.3 MJ per lap (per-car medians,
+carry-over rebuilt), SoC at the line
 0.88–0.92, power-limited ~55 s of a 96 s lap — the gap the league's AI-deployment tuning is
 about. Two field notes for readers of the raw events:
 - **AI deployment is pulsed**: corner-exit bursts of 100–300 ms (164 → −63 → 128 → 200 kW

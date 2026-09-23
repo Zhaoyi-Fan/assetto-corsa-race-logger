@@ -105,7 +105,9 @@ player, so a race log now shows what the AI's deployment strategy actually does.
   the pooled AI, battery on the right axis) drawn over the layout's own zone file — straight-mode,
   overtake detection / activation, power-reduction, power-reset and alternative-curve zones;
   a per-lap energy table; and an energy event timeline (deploy / harvest / wing open /
-  overtake per car, click to jump into the replay).
+  overtake per car, click to jump into the replay). Logs from logger 1.4 can repeat the previous
+  lap's deploy / harvest total in a lap that ended lower (fixed in 1.4.1); the analyzer rebuilds
+  those laps from the energy stream, so older logs report correctly too.
 * **Replay** — 2D top-down map with the real track ribbon, all cars with heading + fading trails,
   follow-cam, live standings with gaps, per-wheel telemetry (ndSlip, surface type, inputs, β)
   with a live scrolling input trace, a full-race throttle/brake ribbon under the scrubber,
@@ -234,8 +236,9 @@ binary) and a scripted log containing a rear-end → spin → off → stuck → 
 sequence, a reverse-gear decoy, a wall hit, a caution, a car with missing ticks and a car with no
 data at all — asserting parser alignment, detection, attribution and report rendering, then the
 same race again as a schema-2 log with scripted energy telemetry (a CAN car, a native-only car,
-straight-mode / overtake / power zones) checking the energy analysis, profiles and the Energy tab
-(76 checks).
+straight-mode / overtake / power zones) checking the energy analysis, profiles and the Energy tab,
+plus a frame-by-frame replay of the logger-1.4 per-lap counter carry-over checking its repair
+(97 checks).
 
 Technical notes:
 

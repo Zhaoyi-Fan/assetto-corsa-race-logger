@@ -12,6 +12,9 @@ detectors, attribution and report rendering behavior:
   car 2 (AI)     causes the contact; missing F ticks around t=20 -> alignment
   car 3 (AI)     declared in META but has zero F/S lines -> absent handling
 
+Schema 2 adds an energy scenario on the same race, plus a separate frame-level fixture for
+the logger-1.4 ELAP carry-over bug (build_carry_log).
+
 Run:  py tests/test_pipeline.py
 """
 import json
@@ -332,6 +335,92 @@ def build_log(schema=1):
     return "\n".join(lines) + "\n"
 
 
+# ELAP carry-over regression (logger 1.4 bug, found 2026-09-23): the FA26 Pro resets its per-lap
+# counters a frame or two after lapCount changes and logger 1.4 took their maximum over every
+# frame of the new lap, so a lap that ended lower than the one before repeated that lap's total.
+# This fixture replays it frame by frame (60 fps, 12 s laps, an E tick every 6th frame):
+#   car 0  counters reset 2 frames late; deploys across every line, so the carried value still
+#          climbs in the lag frames; its lap line falls on an E tick (a row in the change frame)
+#   car 1  AI-like: idle at the line, so the carried value is exact; its first lag frame falls on
+#          an E tick and a -2 kW trickle writes a row there that still shows the old lap
+#   car 2  counters reset in the change frame (logger 1.4 was right) + a row in that frame
+# ELAP is written the 1.4 way; truth = the counters in the last frame before the change, which
+# is what logger 1.4.1 writes.
+CARRY_LAP, CARRY_TICK, CARRY_FPS = 720, 6, 60
+CARRY_CARS = {0: dict(offset=0, lag=2, dep=[300, 200, 300, 200, 300], reg=[300, 350, 300, 350, 300]),
+              1: dict(offset=5, lag=2, dep=[200, 170, 160, 190, 175], reg=[250, 240, 245, 255, 235]),
+              2: dict(offset=0, lag=0, dep=[300, 200, 300, 200, 300], reg=[300, 350, 300, 350, 300])}
+
+
+def carry_kw(ci, lap, k):
+    """kW of fixture car ci in frame k of its lap `lap` (AC's lapCount)."""
+    c = CARRY_CARS[ci]
+    if ci == 1:
+        if 150 <= k < 270:
+            return float(c["dep"][lap])
+        if 400 <= k < 520:
+            return -float(c["reg"][lap])
+        return -2.0 if lap > 0 and k <= c["lag"] else 0.0
+    if k >= CARRY_LAP - 30 or (lap > 0 and k < 30):
+        return 300.0
+    if 120 <= k < 300:
+        return float(c["dep"][lap])
+    if 420 <= k < 540:
+        return -float(c["reg"][lap])
+    return 0.0
+
+
+def build_carry_log(app_version, laps=5):
+    """-> (log text, truth {(car, lapCount): (depMJ, regMJ)}) for the carry-over fixture."""
+    q = lambda x: math.floor(x + 0.5)   # the logger's change-key rounding
+    lines = [
+        "VRCLOG,2,%s" % app_version,
+        'META,{"schema":2,"date":"2026-09-23 12:00:00","track":"stadium","trackFull":"stadium/gp",'
+        '"trackName":"Stadium GP","trackLengthM":%.1f,"sessionIndex":0,"sessionType":3,'
+        '"sessionName":"race","laps":%d,"durationMin":0,"timedRace":false,"cars":%d,"fastHz":15,'
+        '"slowHz":1,"weatherEvery":5,"simTime0":0,"systemTime":0,"restart":0,"airTemp":22.0,'
+        '"roadTemp":30.0,"grip":1.000,"rain":0.000,"energy":true,"energyHz":10}'
+        % (L, laps, len(CARRY_CARS))]
+    for ci in CARRY_CARS:
+        lines.append('CAR,%d,{"driver":"Carry %d","car":"vrc_fa","skin":"s","ai":%s,"aiLevel":1.0,'
+                     '"aiAggression":0.2,"ballast":0.0,"restrictor":0.0,"maxFuel":100.0,'
+                     '"compound":1,"energy":"can"}' % (ci, ci, "false" if ci == 0 else "true"))
+    st = {ci: {"dep": 0.0, "reg": 0.0, "soc": 1.0, "clap": 0, "lap": 0, "mx": [0.0, 0.0],
+               "prev": (0.0, 0.0), "key": None, "wt": -1e9} for ci in CARRY_CARS}
+    truth = {}
+    for fr in range(laps * CARRY_LAP + 10):
+        t = round(fr * 1000 / CARRY_FPS)
+        for ci, c in CARRY_CARS.items():
+            s = st[ci]
+            g = fr - c["offset"]
+            lap = max(0, g // CARRY_LAP)
+            clap = max(0, (g - c["lag"]) // CARRY_LAP)
+            if clap != s["clap"]:                     # the car's own counter reset
+                s["dep"], s["reg"], s["clap"] = 0.0, 0.0, clap
+            kw = carry_kw(ci, lap, max(0, g) - lap * CARRY_LAP)
+            if kw > 0:
+                s["dep"] += kw / CARRY_FPS / 1000
+            else:
+                s["reg"] += -kw / CARRY_FPS / 1000
+            s["soc"] = min(1.0, max(0.0, s["soc"] - kw / CARRY_FPS / 1000 / 4))
+            if lap != s["lap"]:                       # AC lap line: ELAP from the maxima so far
+                truth[(ci, lap)] = (round(s["prev"][0], 3), round(s["prev"][1], 3))
+                lines.append("EV,%d,ELAP,%d,%d,%.3f,%.3f,%.4f,%.4f,%.4f,0,0,0,0,0"
+                             % (t, ci, lap, s["mx"][0], s["mx"][1], s["soc"], s["soc"], s["soc"]))
+                s["lap"], s["mx"] = lap, [0.0, 0.0]
+            s["mx"] = [max(s["mx"][0], s["dep"]), max(s["mx"][1], s["reg"])]  # 1.4: no guard
+            s["prev"] = (s["dep"], s["reg"])
+            if fr % CARRY_TICK == 0:
+                key = (q(kw), q(s["soc"] * 100), q(s["dep"] * 10), q(s["reg"] * 10))
+                if key != s["key"] or t - s["wt"] >= 2000:
+                    s["key"], s["wt"] = key, t
+                    lines.append("E,%d,%d,%.1f,%.4f,%.3f,%.3f,1.00,0.00,350,350,1,0,0,1,0"
+                                 % (t, ci, kw, s["soc"], s["dep"], s["reg"]))
+    lines.append('END,%d,{"reason":"test","lines":%d,"chunks":1}'
+                 % (round((laps * CARRY_LAP + 10) * 1000 / CARRY_FPS), len(lines)))
+    return "\n".join(lines) + "\n", truth
+
+
 FAILS = []
 
 
@@ -518,6 +607,7 @@ def main():
     lap_n = sum(1 for l in rd2.ev_lap if l["car"] in (0, 1, 2))
     check("ELAP per LAP", len(rd2.ev_elap) == lap_n and lap_n >= 6,
           f"elap={len(rd2.ev_elap)} lap={lap_n}")
+    check("clean 1.4 log: no ELAP counter rebuilt", rd2.elap_repaired == 0, str(rd2.elap_repaired))
     n_ev = sum(1 for e in rd2.events if e["type"] in ("DEPLOY", "HARVEST", "SM", "OT"))
     check("energy events parsed", n_ev >= 30
           and all("state" in e for e in rd2.events if e["type"] == "SM"), str(n_ev))
@@ -589,6 +679,49 @@ def main():
           and c0["summary"]["blockedPct"] == 0.0
           and abs(blk["field"]["blockedPct"] - c2["summary"]["blockedPct"]) < 1e-3,
           f"ai={c2['summary']['blockedPct']} player={c0['summary']['blockedPct']}")
+
+    print("ELAP carry-over repair (logger 1.4, fixed in 1.4.1)")
+    text_c, truth = build_carry_log("1.4")
+    log_c = os.path.join(tmp, "vrclog_carry_14.txt")
+    with open(log_c, "w", encoding="utf-8") as f:
+        f.write(text_c)
+    raw = {}
+    for ln in text_c.split("\n"):
+        p = ln.split(",")
+        if len(p) > 6 and p[0] == "EV" and p[2] == "ELAP":
+            raw[(int(p[3]), int(p[4]))] = (float(p[5]), float(p[6]))
+    carried = {(k, j) for k in truth for j in (0, 1) if raw[k][j] > truth[k][j] + 0.005}
+    check("fixture reproduces the 1.4 carry-over (cars 0+1, deploy + regen, not car 2)",
+          len(raw) == len(truth) == 15 and {k[0] for k, _ in carried} == {0, 1}
+          and {j for _, j in carried} == {0, 1} and raw[(0, 2)][0] > 1.0 > truth[(0, 2)][0],
+          str(sorted(carried)))
+    rdc = vrclog_parser.parse(log_c)
+    got = {(l["car"], l["lap_n"]): l for l in rdc.ev_elap}
+    keys = ("dep_mj", "reg_mj")
+    worst = max(abs(got[k][keys[j]] - truth[k][j]) for k in truth for j in (0, 1))
+    check("every lap = the true counters (carried ones rebuilt, within one frame)",
+          worst <= 0.006, f"worst {worst:.4f}")
+    check("clean values used as written",
+          all(got[k][keys[j]] == raw[k][j] for k in truth for j in (0, 1) if (k, j) not in carried))
+    check("rebuilt count + raw values kept",
+          rdc.elap_repaired == len(carried)
+          and all((keys[j] + "_raw" in got[k]) == ((k, j) in carried) for k in truth for j in (0, 1))
+          and all(got[k][keys[j] + "_raw"] == raw[k][j] for k, j in carried),
+          f"repaired={rdc.elap_repaired} carried={len(carried)}")
+    blkc = energy.analyze(rdc)
+    check("energy block: player regen per lap alternates like the real cap (0.6 / 0.7)",
+          [l["reg"] for l in blkc["cars"][0]["laps"]] == [0.6, 0.7, 0.6, 0.7, 0.6]
+          and blkc["elapRepaired"] == len(carried),
+          str([l["reg"] for l in blkc["cars"][0]["laps"]]))
+    check("energy block: AI deploy median from the true laps (0.35, carried 0.38)",
+          blkc["cars"][1]["summary"]["depMed"] == 0.35, str(blkc["cars"][1]["summary"]["depMed"]))
+    log_f = os.path.join(tmp, "vrclog_carry_141.txt")
+    with open(log_f, "w", encoding="utf-8") as f:
+        f.write(build_carry_log("1.4.1")[0])
+    rdf = vrclog_parser.parse(log_f)
+    check("logger 1.4.1 file used as written",
+          rdf.elap_repaired == 0
+          and all((l["dep_mj"], l["reg_mj"]) == raw[(l["car"], l["lap_n"])] for l in rdf.ev_elap))
 
     print("replay binary: energy fields")
     check("replay stride 40 (both schemas)",

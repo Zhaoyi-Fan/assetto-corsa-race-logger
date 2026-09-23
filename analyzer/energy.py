@@ -11,6 +11,7 @@ Block layout:
   aiProfile    pooled AI kW / SoC per spline bin
   zones        the layout's zone list (SM / overtake / power reduction / ...) from ZONES
   events       compact [t, car, kind, state, spline] rows for the timeline panel
+  elapRepaired per-lap counters the parser rebuilt (logger 1.4 carry-over, vrclog_parser)
 Profiles: the change-only E stream is forward-filled onto a 10 Hz grid, joined with the F
 stream's spline, cut into laps and interpolated onto BINS bin centres per lap; the reported
 line is the median across laps (pooled across cars for the AI baseline). Samples below
@@ -299,6 +300,8 @@ def analyze(rd):
         "zones": _zones(rd),
         "events": events,
         "sources": rd.energy_src,
+        # logger-1.4 per-lap counters the parser rebuilt from the E stream (carry-over repair)
+        "elapRepaired": getattr(rd, "elap_repaired", 0),
     }
 
 
