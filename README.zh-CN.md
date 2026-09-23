@@ -44,6 +44,21 @@ python analyzer/vrclog_report.py examples/vrclog_20260803_231630_spa-layout_f1_2
 （复现需要本机装有 spa `layout_f1_2025` 赛道 mod——分析器要读它的 AI line；只看示例报告
 则什么都不需要。）
 
+**[▶ 打开一份混动时代的比赛报告](https://zhaoyi-fan.github.io/assetto-corsa-race-logger/examples/silverstone-fa26-race.report.html)** —
+银石 2026 规则布局 11 车 5 圈（VRC Formula Alpha 2026 Pro），logger V1.4.1 录制。**能量**标签里有
+每台车每圈的部署/回收（玩家回收顶在 8.0 MJ 上限，超车模式那一圈 8.5）、AI 的部署策略（每圈约
+2.2 MJ，79% 的部署请求被功率上限压到 0 kW），以及叠在该布局直道模式/超车/功率区上的沿圈功率
+剖面；回放带能量叠加层。另有第 1 圈 Village 6 车混战、1 个 DNF。原始 log 在
+[`examples/vrclog_silverstone_fa26_race_example.zip`](examples/vrclog_silverstone_fa26_race_example.zip)
+（解压后 14 MB）：
+
+```
+unzip examples/vrclog_silverstone_fa26_race_example.zip -d examples
+python analyzer/vrclog_report.py examples/vrclog_20260923_033654_ks_silverstone-f12026_race_r35.txt
+```
+
+（复现需要本机装有 `ks_silverstone` 的 `f12026` 布局——分析器要读它的 AI line；只看报告什么都不需要。）
+
 **[▶ 打开赛季面板](https://zhaoyi-fan.github.io/assetto-corsa-race-logger/examples/season/)** —
 7 场联赛、7 条赛道（蒙特利尔、摩纳哥、斯帕、匈格罗林、银石、英特拉格斯、赞德沃特），由
 `season_report.py` 聚合：赛历、车手事故榜、跨场失控热点弯。赛历每一行都能打开那场的完整

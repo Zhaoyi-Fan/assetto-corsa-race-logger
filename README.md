@@ -32,7 +32,7 @@ offline, share a link. This project applies the same idea to Assetto Corsa:
 Built for (and calibrated on) the VRC Formula Alpha 2025 offline league; works with any car and
 track content.
 
-## Live example
+## Live examples
 
 **[▶ Open a real race report](https://zhaoyi-fan.github.io/assetto-corsa-race-logger/examples/spa-race.report.html)** —
 a 15-car, 5-lap league race at Spa (Formula Alpha 2025): standing-start reaction times for the
@@ -49,6 +49,23 @@ python analyzer/vrclog_report.py examples/vrclog_20260803_231630_spa-layout_f1_2
 
 (Regeneration reads the track's AI line from your AC install, so it needs the spa
 `layout_f1_2025` track mod; viewing the shipped report needs nothing.)
+
+**[▶ Open a hybrid-era race report](https://zhaoyi-fan.github.io/assetto-corsa-race-logger/examples/silverstone-fa26-race.report.html)** —
+an 11-car, 5-lap race at Silverstone on a 2026-rules layout (VRC Formula Alpha 2026 Pro),
+recorded with logger V1.4.1. The **Energy** tab has every car's deploy / harvest per lap (the
+player's harvest pinned at the 8.0 MJ cap, 8.5 on the overtake lap), the AI's deployment strategy
+(about 2.2 MJ per lap, 79 % of its deployment requests met a 0 kW power cap) and power along the
+lap drawn over the layout's straight-mode, overtake and power zones; the replay carries the energy
+overlay. Plus a 6-car lap-1 melee at Village with one DNF. Raw log:
+[`examples/vrclog_silverstone_fa26_race_example.zip`](examples/vrclog_silverstone_fa26_race_example.zip)
+(14 MB unzipped):
+
+```
+unzip examples/vrclog_silverstone_fa26_race_example.zip -d examples
+python analyzer/vrclog_report.py examples/vrclog_20260923_033654_ks_silverstone-f12026_race_r35.txt
+```
+
+(Regeneration needs the `ks_silverstone` `f12026` layout for its AI line; viewing needs nothing.)
 
 **[▶ Open a season dashboard](https://zhaoyi-fan.github.io/assetto-corsa-race-logger/examples/season/)** —
 seven league races on seven tracks (Montreal, Monaco, Spa, Hungaroring, Silverstone, Interlagos,
